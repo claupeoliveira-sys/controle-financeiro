@@ -26,6 +26,8 @@
     <div class="container">
         <h1>Controle de Orçamento Pessoal</h1>
 
+        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
         <div class="nav-tabs">
             <button class="tab-btn active" type="button" data-target="view-transactions">Transações</button>
             <button class="tab-btn" type="button" data-target="view-costs">Custos por Mês</button>
@@ -48,59 +50,68 @@
 
             <div class="add-transaction">
                 <h3>Adicionar Nova Transação</h3>
-                <form id="transaction-form">
-                    <div class="form-control">
-                        <label for="description">Descrição</label>
-                        <input type="text" id="description" placeholder="Ex: Salário, Aluguel" required>
-                    </div>
+                <button class="btn secondary collapsible-toggle" id="transaction-toggle-btn" type="button">
+                    <span class="btn-icon" aria-hidden="true">+</span> Adicionar Transação
+                </button>
+                <div id="transaction-form-collapsible" class="collapsible-fields collapsed">
+                    <form id="transaction-form">
+                        <div class="form-control">
+                            <label for="description">Descrição</label>
+                            <input type="text" id="description" placeholder="Ex: Salário, Aluguel" required>
+                        </div>
 
-                    <div class="form-row">
-                        <div class="form-control">
-                            <label for="transaction-month">Mês</label>
-                            <input type="month" id="transaction-month" required>
+                        <div class="form-row">
+                            <div class="form-control">
+                                <label for="transaction-month">Mês</label>
+                                <input type="month" id="transaction-month" required>
+                            </div>
                         </div>
-                        <div class="form-control">
-                            <label for="transaction-area">Área (opcional)</label>
-                            <input type="text" id="transaction-area" list="areas-list" placeholder="Ex: Moradia, Saúde, Lazer">
-                        </div>
-                    </div>
 
-                    <div class="form-row">
-                        <div class="form-control">
-                            <label for="transaction-type">Tipo</label>
-                            <select id="transaction-type" required>
-                                <option value="temporario_manual">Temporário Manual</option>
-                                <option value="variavel_manual">Variável Manual</option>
-                                <option value="fixo_manual">Fixo Manual</option>
-                                <option value="fixo_automatico">Fixo Automático</option>
-                            </select>
-                        </div>
-                        <div class="form-control">
-                            <label for="transaction-origin">Origem</label>
-                            <select id="transaction-origin" required>
-                                <option value="Outros">Outros</option>
-                                <option value="Boleto">Boleto</option>
-                                <option value="Cartão">Cartão</option>
-                                <option value="PIX">PIX</option>
-                            </select>
-                        </div>
-                        <div class="form-control">
-                            <label for="transaction-status">Status</label>
-                            <select id="transaction-status" required>
-                                <option value="OK">OK</option>
-                                <option value="Pendente">Pendente</option>
-                                <option value="AUTO">AUTO</option>
-                                <option value="ANUAL">ANUAL</option>
-                            </select>
-                        </div>
-                    </div>
+                        <details class="optional-details" open="false">
+                            <summary>+ Área (opcional)</summary>
+                            <div class="form-control">
+                                <label for="transaction-area">Área</label>
+                                <input type="text" id="transaction-area" list="areas-list" placeholder="Ex: Moradia, Saúde, Lazer">
+                            </div>
+                        </details>
 
-                    <div class="form-control">
-                        <label for="amount">Valor (negativo para despesas, positivo para receitas)</label>
-                        <input type="number" id="amount" placeholder="Ex: -50 (despesa) ou 100 (receita)" step="0.01" required>
-                    </div>
-                    <button class="btn" type="submit">Adicionar Transação</button>
-                </form>
+                        <div class="form-row">
+                            <div class="form-control">
+                                <label for="transaction-type">Tipo</label>
+                                <select id="transaction-type" required>
+                                    <option value="temporario_manual">Temporário Manual</option>
+                                    <option value="variavel_manual">Variável Manual</option>
+                                    <option value="fixo_manual">Fixo Manual</option>
+                                    <option value="fixo_automatico">Fixo Automático</option>
+                                </select>
+                            </div>
+                            <div class="form-control">
+                                <label for="transaction-origin">Origem</label>
+                                <select id="transaction-origin" required>
+                                    <option value="Outros">Outros</option>
+                                    <option value="Boleto">Boleto</option>
+                                    <option value="Cartão">Cartão</option>
+                                    <option value="PIX">PIX</option>
+                                </select>
+                            </div>
+                            <div class="form-control">
+                                <label for="transaction-status">Status</label>
+                                <select id="transaction-status" required>
+                                    <option value="OK">OK</option>
+                                    <option value="Pendente">Pendente</option>
+                                    <option value="AUTO">AUTO</option>
+                                    <option value="ANUAL">ANUAL</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-control">
+                            <label for="amount">Valor (negativo para despesas, positivo para receitas)</label>
+                            <input type="number" id="amount" placeholder="Ex: -50 (despesa) ou 100 (receita)" step="0.01" required>
+                        </div>
+                        <button class="btn" type="submit">Adicionar Transação</button>
+                    </form>
+                </div>
             </div>
         </div>
 
@@ -135,72 +146,83 @@
 
             <div class="add-recurring-cost">
                 <h4>Adicionar conta recorrente</h4>
-                <form id="cost-recurring-form">
-                    <div class="form-control">
-                        <label for="cost-description">Descrição</label>
-                        <input type="text" id="cost-description" placeholder="Ex: Aluguel, Internet" required>
-                    </div>
-
-                    <div class="form-control">
-                        <label for="cost-area">Área (opcional)</label>
-                        <input type="text" id="cost-area" list="areas-list" placeholder="Ex: Moradia, Internet, Transporte">
-                    </div>
-
-                    <div class="form-control">
-                        <label for="cost-credit-card">Cartão de crédito (opcional)</label>
-                        <select id="cost-credit-card">
-                            <option value="">Sem cartão</option>
-                        </select>
-                    </div>
-
-                    <div class="form-control">
-                        <label for="cost-type">Tipo</label>
-                        <select id="cost-type" required>
-                            <option value="fixo_automatico">Fixo Automático</option>
-                            <option value="fixo_manual">Fixo Manual</option>
-                            <option value="variavel_manual">Variável Manual</option>
-                            <option value="temporario_manual">Temporário Manual</option>
-                        </select>
-                    </div>
-
-                    <div class="form-control">
-                        <label for="cost-amount">Valor (para Fixo; para Variável como valor inicial)</label>
-                        <input type="number" id="cost-amount" placeholder="Ex: 120.50" step="0.01" required>
-                    </div>
-
-                    <div class="form-row">
+                <button class="btn secondary collapsible-toggle" id="cost-recurring-toggle-btn" type="button">
+                    <span class="btn-icon" aria-hidden="true">+</span> Adicionar recorrência
+                </button>
+                <div id="cost-recurring-form-collapsible" class="collapsible-fields collapsed">
+                    <form id="cost-recurring-form">
                         <div class="form-control">
-                            <label for="cost-origin">Origem</label>
-                            <select id="cost-origin" required>
-                                <option value="Outros">Outros</option>
-                                <option value="Boleto">Boleto</option>
-                                <option value="Cartão">Cartão</option>
-                                <option value="PIX">PIX</option>
+                            <label for="cost-description">Descrição</label>
+                            <input type="text" id="cost-description" placeholder="Ex: Aluguel, Internet" required>
+                        </div>
+
+                        <details class="optional-details" open="false">
+                            <summary>+ Área (opcional)</summary>
+                            <div class="form-control">
+                                <label for="cost-area">Área</label>
+                                <input type="text" id="cost-area" list="areas-list" placeholder="Ex: Moradia, Internet, Transporte">
+                            </div>
+                        </details>
+
+                        <div class="form-control">
+                            <label for="cost-credit-card">Cartão de crédito (opcional)</label>
+                            <select id="cost-credit-card">
+                                <option value="">Sem cartão</option>
                             </select>
                         </div>
+
                         <div class="form-control">
-                            <label for="cost-status-padrao">Status Padrão</label>
-                            <select id="cost-status-padrao" required>
-                                <option value="AUTO">AUTO</option>
-                                <option value="OK">OK</option>
-                                <option value="ANUAL">ANUAL</option>
+                            <label for="cost-type">Tipo</label>
+                            <select id="cost-type" required>
+                                <option value="fixo_automatico">Fixo Automático</option>
+                                <option value="fixo_manual">Fixo Manual</option>
+                                <option value="variavel_manual">Variável Manual</option>
+                                <option value="temporario_manual">Temporário Manual</option>
                             </select>
                         </div>
-                    </div>
 
-                    <div class="form-row">
                         <div class="form-control">
-                            <label for="cost-start-month">Início (mês)</label>
-                            <input type="month" id="cost-start-month" required>
+                            <label for="cost-amount">Valor (para Fixo; para Variável como valor inicial)</label>
+                            <input type="number" id="cost-amount" placeholder="Ex: 120.50" step="0.01" required>
                         </div>
-                        <div class="form-control">
-                            <label for="cost-end-month">Fim (opcional)</label>
-                            <input type="month" id="cost-end-month">
-                        </div>
-                    </div>
 
-                    <button class="btn" type="submit">Adicionar recorrência</button>
-                </form>
+                        <div class="form-row">
+                            <div class="form-control">
+                                <label for="cost-origin">Origem</label>
+                                <select id="cost-origin" required>
+                                    <option value="Outros">Outros</option>
+                                    <option value="Boleto">Boleto</option>
+                                    <option value="Cartão">Cartão</option>
+                                    <option value="PIX">PIX</option>
+                                </select>
+                            </div>
+                            <div class="form-control">
+                                <label for="cost-status-padrao">Status Padrão</label>
+                                <select id="cost-status-padrao" required>
+                                    <option value="AUTO">AUTO</option>
+                                    <option value="OK">OK</option>
+                                    <option value="ANUAL">ANUAL</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-control">
+                                <label for="cost-start-month">Início (mês)</label>
+                                <input type="month" id="cost-start-month" required>
+                            </div>
+                            <details class="optional-details" open="false" style="flex:1;">
+                                <summary>+ Fim (opcional)</summary>
+                                <div class="form-control">
+                                    <label for="cost-end-month">Fim</label>
+                                    <input type="month" id="cost-end-month">
+                                </div>
+                            </details>
+                        </div>
+
+                        <button class="btn" type="submit">Adicionar recorrência</button>
+                    </form>
+                </div>
             </div>
         </div>
 
@@ -235,58 +257,66 @@
 
             <div class="invoice-section">
                 <h4>Lançar compra no cartão (por mês)</h4>
-                <form id="credit-card-purchase-form">
-                    <div class="form-row">
-                        <div class="form-control">
-                            <label for="purchase-month">Mês</label>
-                            <input type="month" id="purchase-month" required>
+                <button class="btn secondary collapsible-toggle" id="purchase-toggle-btn" type="button">
+                    <span class="btn-icon" aria-hidden="true">+</span> Lançar compra no cartão
+                </button>
+                <div id="purchase-form-collapsible" class="collapsible-fields collapsed">
+                    <form id="credit-card-purchase-form">
+                        <div class="form-row">
+                            <div class="form-control">
+                                <label for="purchase-month">Mês</label>
+                                <input type="month" id="purchase-month" required>
+                            </div>
+                            <div class="form-control">
+                                <label for="purchase-card-select">Cartão</label>
+                                <select id="purchase-card-select" required>
+                                    <option value="">Selecione</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="form-control">
-                            <label for="purchase-card-select">Cartão</label>
-                            <select id="purchase-card-select" required>
-                                <option value="">Selecione</option>
-                            </select>
+
+                        <div class="form-row">
+                            <div class="form-control">
+                                <label for="purchase-origin">Origem</label>
+                                <select id="purchase-origin" required>
+                                    <option value="Cartão" selected>Cartão</option>
+                                    <option value="Boleto">Boleto</option>
+                                    <option value="PIX">PIX</option>
+                                    <option value="Outros">Outros</option>
+                                </select>
+                            </div>
+                            <div class="form-control">
+                                <label for="purchase-status">Status</label>
+                                <select id="purchase-status" required>
+                                    <option value="OK" selected>OK</option>
+                                    <option value="Pendente">Pendente</option>
+                                    <option value="AUTO">AUTO</option>
+                                    <option value="ANUAL">ANUAL</option>
+                                </select>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="form-row">
                         <div class="form-control">
-                            <label for="purchase-origin">Origem</label>
-                            <select id="purchase-origin" required>
-                                <option value="Cartão" selected>Cartão</option>
-                                <option value="Boleto">Boleto</option>
-                                <option value="PIX">PIX</option>
-                                <option value="Outros">Outros</option>
-                            </select>
+                            <label for="purchase-description">Descrição</label>
+                            <input type="text" id="purchase-description" placeholder="Ex: Mercado, Remédio, Hotel" required>
                         </div>
+
                         <div class="form-control">
-                            <label for="purchase-status">Status</label>
-                            <select id="purchase-status" required>
-                                <option value="OK" selected>OK</option>
-                                <option value="Pendente">Pendente</option>
-                                <option value="AUTO">AUTO</option>
-                                <option value="ANUAL">ANUAL</option>
-                            </select>
+                            <label for="purchase-amount">Valor da compra</label>
+                            <input type="number" id="purchase-amount" placeholder="Ex: 89.90" step="0.01" required>
                         </div>
-                    </div>
 
-                    <div class="form-control">
-                        <label for="purchase-description">Descrição</label>
-                        <input type="text" id="purchase-description" placeholder="Ex: Mercado, Remédio, Hotel" required>
-                    </div>
+                        <details class="optional-details" open="false">
+                            <summary>+ Área (opcional)</summary>
+                            <div class="form-control">
+                                <label for="purchase-area">Área</label>
+                                <input type="text" id="purchase-area" list="areas-list" placeholder="Ex: Alimentação, Saúde, Viagem">
+                            </div>
+                        </details>
 
-                    <div class="form-control">
-                        <label for="purchase-amount">Valor da compra</label>
-                        <input type="number" id="purchase-amount" placeholder="Ex: 89.90" step="0.01" required>
-                    </div>
-
-                    <div class="form-control">
-                        <label for="purchase-area">Área (opcional)</label>
-                        <input type="text" id="purchase-area" list="areas-list" placeholder="Ex: Alimentação, Saúde, Viagem">
-                    </div>
-
-                    <button class="btn secondary" type="submit">Lançar no cartão</button>
-                </form>
+                        <button class="btn secondary" type="submit">Lançar no cartão</button>
+                    </form>
+                </div>
             </div>
 
             <div class="invoice-section">
@@ -321,6 +351,10 @@
 
                 <div class="add-recurring-cost" style="border-top: 0; padding-top: 0;">
                     <h4>Adicionar despesa ao fechamento</h4>
+                    <button class="btn secondary collapsible-toggle" id="card-statement-item-toggle-btn" type="button">
+                        <span class="btn-icon" aria-hidden="true">+</span> Detalhes
+                    </button>
+                    <div id="card-statement-item-form-collapsible" class="collapsible-fields collapsed">
                     <form id="card-statement-item-form">
                         <div class="form-control">
                             <label for="card-statement-item-description">Descrição</label>
@@ -332,11 +366,15 @@
                                 <label for="card-statement-item-amount">Valor</label>
                                 <input type="number" id="card-statement-item-amount" placeholder="Ex: 500" step="0.01" required>
                             </div>
+                        </div>
+
+                        <details class="optional-details" open="false">
+                            <summary>+ Área (opcional)</summary>
                             <div class="form-control">
-                                <label for="card-statement-item-area">Área (opcional)</label>
+                                <label for="card-statement-item-area">Área</label>
                                 <input type="text" id="card-statement-item-area" list="areas-list" placeholder="Ex: Vestuário, Saúde, Alimentação">
                             </div>
-                        </div>
+                        </details>
 
                         <div class="form-row">
                             <div class="form-control">
@@ -361,6 +399,7 @@
 
                         <button class="btn secondary" type="submit">Deduzir valor</button>
                     </form>
+                    </div>
                 </div>
 
                 <div class="recurring-costs">

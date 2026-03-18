@@ -113,8 +113,8 @@ h2, h3 {
     background-color: var(--danger-color);
     border: 0;
     color: #fff;
-    font-size: 20px;
-    line-height: 20px;
+    font-size: 0;
+    line-height: 0;
     padding: 5px 10px;
     position: absolute;
     top: 50%;
@@ -124,6 +124,10 @@ h2, h3 {
     transition: opacity 0.3s ease;
     border-top-left-radius: 5px;
     border-bottom-left-radius: 5px;
+}
+
+#transaction-list li .delete-btn svg {
+    display: block;
 }
 
 #transaction-list li:hover .delete-btn {
@@ -183,10 +187,20 @@ h2, h3 {
     font-size: 16px;
     padding: 6px 10px;
     border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
 .edit-btn:hover {
     background-color: #0b5ed7;
+}
+
+.action-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .remove-btn {
@@ -198,6 +212,10 @@ h2, h3 {
     padding: 6px 10px;
     border-radius: 6px;
     transition: background-color 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
 .remove-btn:hover {
@@ -457,6 +475,90 @@ h2, h3 {
 
 .btn:hover {
     background-color: #218838; /* Um verde um pouco mais escuro */
+}
+
+.btn-icon {
+    display: inline-block;
+    margin-right: 8px;
+    font-weight: bold;
+}
+
+.collapsible-toggle {
+    width: 100%;
+}
+
+.collapsible-fields {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transform: translateY(-6px);
+    transition: max-height 0.45s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.collapsible-fields.expanded {
+    max-height: 1300px;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.optional-details {
+    margin: 10px 0 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background-color: rgba(15, 27, 51, 0.65);
+    padding: 6px 10px;
+}
+
+.optional-details summary {
+    cursor: pointer;
+    color: var(--text-color);
+    user-select: none;
+    font-weight: bold;
+    outline: none;
+}
+
+.toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(15, 27, 51, 0.95);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 10px 14px;
+    border-radius: 12px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 999;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+#transaction-list li .edit-btn {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+#transaction-list li:hover .edit-btn {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#card-statement-item-list .remove-btn {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+#card-statement-item-list li.statement-item:hover .remove-btn {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 @media (max-width: 600px) {

@@ -45,6 +45,41 @@ let creditCards = getJSONFromLocalStorage(STORAGE_KEYS.creditCards, []);
 let creditCardMonthlyStatements = getJSONFromLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, []);
 
 // -------------------------
+// UI: toast e colapsos
+// -------------------------
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+
+function showToast(message) {
+    if (!toastEl) return;
+    toastEl.textContent = message;
+    toastEl.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        toastEl.classList.remove('show');
+    }, 2500);
+}
+
+function setupCollapsible(toggleId, targetId) {
+    const toggleBtn = document.getElementById(toggleId);
+    const target = document.getElementById(targetId);
+    if (!toggleBtn || !target) return;
+
+    toggleBtn.addEventListener('click', () => {
+        const isExpanded = target.classList.contains('expanded');
+        target.classList.toggle('expanded', !isExpanded);
+        if (!isExpanded) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+}
+
+setupCollapsible('transaction-toggle-btn', 'transaction-form-collapsible');
+setupCollapsible('cost-recurring-toggle-btn', 'cost-recurring-form-collapsible');
+setupCollapsible('purchase-toggle-btn', 'purchase-form-collapsible');
+setupCollapsible('card-statement-item-toggle-btn', 'card-statement-item-form-collapsible');
+
+// -------------------------
 // UI: alternar "telas"
 // -------------------------
 function showView(targetId) {
@@ -131,8 +166,24 @@ function addTransactionDOM(transaction) {
             ].filter(Boolean).join(' | ')}</div>
         </div>
         <span>${sign} R$ ${Math.abs(transaction.amount).toFixed(2)}</span>
-        <button class="edit-btn" type="button" onclick="startEditTransaction(${transaction.id})">Editar</button>
-        <button class="delete-btn" onclick="removeTransaction(${transaction.id})">x</button>
+        <button class="edit-btn" type="button" onclick="startEditTransaction(${transaction.id})">
+            <span class="action-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                </svg>
+            </span>
+            Editar
+        </button>
+        <button class="delete-btn" onclick="removeTransaction(${transaction.id})" type="button" aria-label="Remover">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h18"></path>
+                <path d="M8 6V4h8v2"></path>
+                <path d="M19 6l-1 14H6L5 6"></path>
+                <path d="M10 11v6"></path>
+                <path d="M14 11v6"></path>
+            </svg>
+        </button>
     `;
 
     transactionList.appendChild(item);
@@ -272,6 +323,7 @@ function addTransaction(e) {
                         renderAnalyticsForMonth(anaMonth.value);
                     }
                     cancelEditTransaction();
+                    showToast('Transação atualizada com sucesso!');
                     return;
                 }
             }
@@ -293,6 +345,7 @@ function addTransaction(e) {
                 renderAnalyticsForMonth(anaMonth.value);
             }
             cancelEditTransaction();
+            showToast('Transação atualizada com sucesso!');
             return;
         }
     }
@@ -321,6 +374,7 @@ function addTransaction(e) {
         renderAnalyticsForMonth(anaMonth.value);
     }
 
+    showToast('Transação adicionada com sucesso!');
     descriptionInput.value = '';
     amountInput.value = '';
     transactionAreaInput.value = '';
@@ -339,6 +393,7 @@ function removeTransaction(id) {
         cancelEditTransaction();
     }
     init(); // Re-inicializa para atualizar o DOM e o saldo
+    showToast('Transação removida.');
 }
 
 // Inicializar o aplicativo
@@ -600,6 +655,7 @@ function postMonthCostsToHistory() {
     if (postMonthCostsHint) {
         postMonthCostsHint.textContent = 'Custos lançados/atualizados no histórico.';
     }
+    showToast('Custos lançados no histórico com sucesso!');
 
     if (invoiceMonthInput && invoiceMonthInput.value === monthYYYYMM) {
         renderInvoicesForMonth(monthYYYYMM);
@@ -677,6 +733,7 @@ if (costRecurringForm) {
         // Mantem tipo e valor para facilitar múltiplos lançamentos com mesma configuração
         costAmountInput.value = '';
         if (postMonthCostsHint) postMonthCostsHint.textContent = '';
+        showToast('Recorrência adicionada com sucesso!');
     });
 }
 
@@ -960,6 +1017,8 @@ if (purchaseForm) {
             renderAnalyticsForMonth(monthYYYYMM);
         }
 
+        showToast('Compra no cartão lançada com sucesso!');
+
         if (purchaseDescriptionInput) purchaseDescriptionInput.value = '';
         if (purchaseAmountInput) purchaseAmountInput.value = '';
         if (purchaseAreaInput) purchaseAreaInput.value = '';
@@ -1101,7 +1160,18 @@ function renderCardStatementForSelected() {
             </div>
             <div class="statement-right" style="display:flex; gap:10px; align-items:center;">
                 <div class="invoice-total">R$ ${Number(item.amount).toFixed(2)}</div>
-                <button class="remove-btn" type="button" onclick="removeCardStatementItemById(${item.id})">Remover</button>
+                <button class="remove-btn" type="button" onclick="removeCardStatementItemById(${item.id})" aria-label="Remover">
+                    <span class="action-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 6h18"></path>
+                            <path d="M8 6V4h8v2"></path>
+                            <path d="M19 6l-1 14H6L5 6"></path>
+                            <path d="M10 11v6"></path>
+                            <path d="M14 11v6"></path>
+                        </svg>
+                    </span>
+                    Remover
+                </button>
             </div>
         `;
         cardStatementItemList.appendChild(li);
@@ -1126,6 +1196,7 @@ function removeCardStatementItemById(itemId) {
     if (typeof renderAnalyticsForMonth === 'function' && analyticsMonthInput && analyticsMonthInput.value) {
         renderAnalyticsForMonth(analyticsMonthInput.value);
     }
+    showToast('Item removido do fechamento.');
 }
 
 if (cardStatementMonthInput && cardStatementSelect) {
@@ -1171,6 +1242,7 @@ if (cardStatementSaveBtn) {
         if (typeof renderAnalyticsForMonth === 'function' && analyticsMonthInput && analyticsMonthInput.value === monthYYYYMM) {
             renderAnalyticsForMonth(monthYYYYMM);
         }
+        showToast('Fechamento do cartão salvo com sucesso!');
     });
 }
 
@@ -1226,6 +1298,8 @@ if (cardStatementItemForm) {
         if (typeof renderAnalyticsForMonth === 'function' && analyticsMonthInput && analyticsMonthInput.value === monthYYYYMM) {
             renderAnalyticsForMonth(monthYYYYMM);
         }
+
+        showToast('Despesa deduzida adicionada com sucesso!');
     });
 }
 
