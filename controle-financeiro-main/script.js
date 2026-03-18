@@ -1,4 +1,4 @@
-const balance = document.getElementById('balance');
+﻿const balance = document.getElementById('balance');
 const transactionList = document.getElementById('transaction-list');
 const form = document.getElementById('transaction-form');
 const descriptionInput = document.getElementById('description');
@@ -13,9 +13,7 @@ const transactionFormSubmitBtn = form ? form.querySelector('button[type="submit"
 const STORAGE_KEYS = {
     transactions: 'transactions',
     recurringCosts: 'recurring_costs',
-    variableCostOverrides: 'variable_cost_overrides',
-    creditCards: 'credit_cards',
-    creditCardMonthlyStatements: 'credit_card_monthly_statements'
+    variableCostOverrides: 'variable_cost_overrides'
 };
 
 // Funções genéricas para Local Storage
@@ -41,8 +39,33 @@ function saveTransactionsToLocalStorage(transactions) {
 let transactions = getTransactionsFromLocalStorage();
 let recurringCosts = getJSONFromLocalStorage(STORAGE_KEYS.recurringCosts, []);
 let variableCostOverrides = getJSONFromLocalStorage(STORAGE_KEYS.variableCostOverrides, []);
-let creditCards = getJSONFromLocalStorage(STORAGE_KEYS.creditCards, []);
-let creditCardMonthlyStatements = getJSONFromLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, []);
+
+// Migração leve para o modelo simplificado (sem cartões)
+// Normaliza tipos de recorrência para 'fixo' | 'variavel'.
+recurringCosts = (recurringCosts || []).map(c => {
+    const rawType = (c && c.type) ? String(c.type) : '';
+    let type = rawType;
+    if (rawType === 'fixo_automatico' || rawType === 'fixo_manual' || rawType === 'fixo') type = 'fixo';
+    if (rawType === 'variavel_manual' || rawType === 'variavel') type = 'variavel';
+    // fallback (casos antigos)
+    if (rawType === 'temporario_manual') type = 'fixo';
+
+    const amount = type === 'variavel' ? 0 : Math.abs(Number(c?.amount ?? 0));
+    return {
+        ...c,
+        type,
+        amount
+    };
+});
+
+const recurringCostTypeMap = new Map((recurringCosts || []).map(c => [String(c.id), c.type]));
+variableCostOverrides = (variableCostOverrides || [])
+    .filter(o => o && recurringCostTypeMap.get(String(o.costId)) === 'variavel')
+    .map(o => ({
+        ...o,
+        month: o.month,
+        amount: Math.abs(Number(o.amount ?? 0))
+    }));
 
 // -------------------------
 // UI: toast e colapsos
@@ -91,8 +114,6 @@ function setupCollapsible(toggleId, targetId) {
 
 setupCollapsible('transaction-toggle-btn', 'transaction-form-collapsible');
 setupCollapsible('cost-recurring-toggle-btn', 'cost-recurring-form-collapsible');
-setupCollapsible('purchase-toggle-btn', 'purchase-form-collapsible');
-setupCollapsible('card-statement-item-toggle-btn', 'card-statement-item-form-collapsible');
 
 // -------------------------
 // UI: alternar "telas"
@@ -126,27 +147,26 @@ tabButtons.forEach(btn => {
 // -------------------------
 function getTipoLabel(tipoCode) {
     const code = (tipoCode ?? '').toString();
-    if (code === 'fixo_automatico') return 'Fixo Automático';
-    if (code === 'fixo_manual') return 'Fixo Manual';
-    if (code === 'variavel_manual') return 'Variável Manual';
-    if (code === 'temporario_manual') return 'Temporário Manual';
+    if (code === 'fixo') return 'Fixo';
+    if (code === 'variavel') return 'Variável';
+    if (code === 'despesa') return 'Despesa';
+    if (code === 'receita') return 'Receita';
 
-    // Compatibilidade com versões antigas
-    if (code === 'fixo') return 'Fixo Manual';
-    if (code === 'variavel') return 'Variável Manual';
+    // compatibilidade com versões antigas
+    if (code === 'fixo_automatico' || code === 'fixo_manual') return 'Fixo';
+    if (code === 'variavel_manual') return 'Variável';
 
-    return 'Temporário Manual';
+    return 'Despesa';
 }
 
 function isVariableTipoCode(tipoCode) {
     const code = (tipoCode ?? '').toString();
-    return code === 'variavel_manual' || code === 'variavel';
+    return code === 'variavel' || code === 'variavel_manual';
 }
 
 function getOrigemLabel(meta) {
     if (!meta) return 'Outros';
     if (meta.origem) return meta.origem;
-    if (meta.creditCardId) return 'Cartão';
     return 'Outros';
 }
 
@@ -165,7 +185,7 @@ function addTransactionDOM(transaction) {
     const area = transaction.area ? String(transaction.area) : '';
     const monthLabel = transaction.meta && transaction.meta.month ? transaction.meta.month : '';
     const meta = transaction.meta || {};
-    const tipoLabel = getTipoLabel(meta.tipo ?? meta.costType ?? meta.manualType);
+    const tipoLabel = getTipoLabel(meta.recurringCostType ?? meta.tipo ?? meta.costType ?? meta.manualType);
     const origemLabel = getOrigemLabel(meta);
     const statusLabel = getStatusLabel(meta);
 
@@ -230,18 +250,28 @@ function startEditTransaction(id) {
     if (t.meta && t.meta.type === 'recurring_cost' && t.meta.recurringCostId) {
         const cost = recurringCosts.find(c => c.id === t.meta.recurringCostId);
         descriptionInput.value = cost ? (cost.description ?? '') : (t.description ?? '');
-        transactionTypeInput.value = (cost && cost.type) ? cost.type : (t.meta?.tipo ?? 'temporario_manual');
+        // Recorrências são sempre despesas no histórico
+        transactionTypeInput.value = 'despesa';
         transactionOriginInput.value = (cost && cost.origem) ? cost.origem : (t.meta?.origem ?? getOrigemLabel(t.meta));
         transactionStatusInput.value = (cost && cost.statusPadrao) ? cost.statusPadrao : (t.meta?.status ?? 'OK');
         transactionAreaInput.value = (t.area ?? (cost ? cost.area : '')) || '';
     } else {
         descriptionInput.value = t.description ?? '';
-        transactionTypeInput.value = t.meta?.tipo ?? t.meta?.costType ?? 'temporario_manual';
+        // Se dados antigos estiverem presentes, inferimos pelo sinal do amount
+        if (t.meta?.manualOverrideFor === 'fixo') {
+            transactionTypeInput.value = 'despesa';
+        } else {
+            transactionTypeInput.value =
+                (t.meta?.tipo === 'receita' || t.meta?.tipo === 'despesa')
+                    ? t.meta.tipo
+                    : (t.amount < 0 ? 'despesa' : 'receita');
+        }
         transactionOriginInput.value = t.meta?.origem ?? getOrigemLabel(t.meta);
         transactionStatusInput.value = t.meta?.status ?? 'OK';
         transactionAreaInput.value = t.area ?? '';
     }
-    amountInput.value = t.amount ?? 0;
+    // UI sempre recebe valor positivo
+    amountInput.value = Math.abs(t.amount ?? 0);
     transactionMonthInput.value = t.meta && t.meta.month ? t.meta.month : (transactionMonthInput.value || getCurrentMonthYYYYMM());
 
     if (transactionFormSubmitBtn) {
@@ -255,7 +285,7 @@ function cancelEditTransaction() {
     amountInput.value = '';
     transactionAreaInput.value = '';
     transactionMonthInput.value = getCurrentMonthYYYYMM();
-    if (transactionTypeInput) transactionTypeInput.value = 'temporario_manual';
+    if (transactionTypeInput) transactionTypeInput.value = 'despesa';
     if (transactionOriginInput) transactionOriginInput.value = 'Outros';
     if (transactionStatusInput) transactionStatusInput.value = 'OK';
 
@@ -278,7 +308,7 @@ function addTransaction(e) {
 
     const monthYYYYMM = transactionMonthInput ? transactionMonthInput.value : '';
     const area = transactionAreaInput ? transactionAreaInput.value.trim() : '';
-    const tipo = transactionTypeInput ? transactionTypeInput.value : 'temporario_manual';
+    const tipo = transactionTypeInput ? transactionTypeInput.value : 'despesa';
     const origem = transactionOriginInput ? transactionOriginInput.value : 'Outros';
     const status = transactionStatusInput ? transactionStatusInput.value : 'OK';
     const newAmount = +amountInput.value; // O '+' converte para número
@@ -291,6 +321,9 @@ function addTransaction(e) {
         return;
     }
 
+    const amountAbs = Math.abs(newAmount);
+    const signedAmount = tipo === 'receita' ? amountAbs : -amountAbs;
+
     if (editingTransactionId !== null) {
         const idx = transactions.findIndex(t => t.id === editingTransactionId);
         if (idx >= 0) {
@@ -301,12 +334,11 @@ function addTransaction(e) {
             if (prevMeta.type === 'recurring_cost' && prevMeta.recurringCostId) {
                 const cost = recurringCosts.find(c => c.id === prevMeta.recurringCostId);
                 if (cost) {
-                    cost.type = tipo;
                     cost.origem = origem;
                     cost.statusPadrao = status;
-
                     // Se o usuário alterar o mês, remove o lançamento antigo daquele mês (evita duplicar).
                     if (prevMonth && prevMonth !== monthYYYYMM) {
+                        // remove recorrência já materializada naquele mês
                         transactions = transactions.filter(tx => {
                             return !(
                                 tx.meta &&
@@ -316,33 +348,42 @@ function addTransaction(e) {
                             );
                         });
 
-                        const prevTipo = prevMeta.tipo ?? prevMeta.costType ?? '';
-                        if (prevTipo === 'variavel_manual' || prevTipo === 'variavel') {
+                        // remove override específico do mês antigo
+                        if (cost.type === 'variavel') {
                             variableCostOverrides = variableCostOverrides.filter(o => {
                                 return !(o.costId === prevMeta.recurringCostId && o.month === prevMonth);
                             });
                             setJSONToLocalStorage(STORAGE_KEYS.variableCostOverrides, variableCostOverrides);
+                        }
+
+                        if (cost.type === 'fixo') {
+                            transactions = transactions.filter(tx => {
+                                const m = tx.meta || {};
+                                return !(
+                                    m.type === 'manual_transaction' &&
+                                    m.recurringCostId === prevMeta.recurringCostId &&
+                                    m.manualOverrideFor === 'fixo' &&
+                                    m.month === prevMonth
+                                );
+                            });
                         }
                     }
 
                     cost.description = description;
                     cost.area = area;
 
-                    if (isVariableTipoCode(cost.type)) {
-                        setVariableOverrideAmount(cost.id, monthYYYYMM, Math.abs(newAmount));
+                    if (cost.type === 'variavel') {
+                        setVariableOverrideAmount(cost.id, monthYYYYMM, amountAbs);
+                        upsertCostTransaction(cost, monthYYYYMM, amountAbs);
                     } else {
-                        cost.amount = Math.abs(newAmount);
+                        // Fixo: override manual apenas para aquele mês
+                        upsertFixedManualOverrideTransaction(cost, monthYYYYMM, amountAbs);
                     }
 
                     setJSONToLocalStorage(STORAGE_KEYS.recurringCosts, recurringCosts);
-                    upsertCostTransaction(cost, monthYYYYMM, Math.abs(newAmount));
-
                     saveTransactionsToLocalStorage(transactions);
                     init();
-                    const invMonth = document.getElementById('invoice-month');
-                    if (invMonth && invMonth.value) {
-                        renderInvoicesForMonth(invMonth.value);
-                    }
+
                     const anaMonth = document.getElementById('analytics-month');
                     if (anaMonth && anaMonth.value && typeof renderAnalyticsForMonth === 'function') {
                         renderAnalyticsForMonth(anaMonth.value);
@@ -355,13 +396,27 @@ function addTransaction(e) {
 
             // Edição padrão (transação manual / compra no cartão)
             transactions[idx].description = description;
-            transactions[idx].amount = newAmount;
+            transactions[idx].amount = signedAmount;
             transactions[idx].area = area;
             if (!transactions[idx].meta) transactions[idx].meta = {};
             transactions[idx].meta.month = monthYYYYMM;
             transactions[idx].meta.tipo = tipo;
             transactions[idx].meta.origem = origem;
             transactions[idx].meta.status = status;
+
+            // Se for override manual de um "Fixo" (criado pela matriz), evita duplicar com recurring_cost
+            const m = transactions[idx].meta || {};
+            if (m.type === 'manual_transaction' && m.manualOverrideFor === 'fixo' && m.recurringCostId) {
+                const costId = m.recurringCostId;
+                transactions = transactions.filter(tx => {
+                    const tm = tx.meta || {};
+                    return !(
+                        tm.type === 'recurring_cost' &&
+                        tm.recurringCostId === costId &&
+                        (tm.month === prevMonth || tm.month === monthYYYYMM)
+                    );
+                });
+            }
 
             saveTransactionsToLocalStorage(transactions);
             init();
@@ -378,7 +433,7 @@ function addTransaction(e) {
     const transaction = {
         id: generateID(),
         description,
-        amount: newAmount,
+        amount: signedAmount,
         area,
         meta: {
             month: monthYYYYMM,
@@ -452,7 +507,6 @@ const postMonthCostsHint = document.getElementById('post-month-costs-hint');
 const costRecurringForm = document.getElementById('cost-recurring-form');
 const costDescriptionInput = document.getElementById('cost-description');
 const costAreaInput = document.getElementById('cost-area');
-const costCreditCardSelect = document.getElementById('cost-credit-card');
 const costTypeSelect = document.getElementById('cost-type');
 const costOriginSelect = document.getElementById('cost-origin');
 const costStatusPadraoSelect = document.getElementById('cost-status-padrao');
@@ -497,12 +551,120 @@ function setVariableOverrideAmount(costId, monthYYYYMM, amount) {
     setJSONToLocalStorage(STORAGE_KEYS.variableCostOverrides, variableCostOverrides);
 }
 
+// Horizon prático para "meses futuros" quando não existe endMonth.
+// Mantemos limitado para não explodir o tamanho do histórico no front-end estático.
+const POST_HORIZON_MONTHS = 24;
+
+function monthYYYYMMToDate(yyyyMM) {
+    if (!yyyyMM || typeof yyyyMM !== 'string') return null;
+    const [y, m] = yyyyMM.split('-').map(Number);
+    if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+    return new Date(y, m - 1, 1);
+}
+
+function dateToMonthYYYYMM(d) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return `${yyyy}-${mm}`;
+}
+
+function addMonthsToMonthYYYYMM(yyyyMM, deltaMonths) {
+    const date = monthYYYYMMToDate(yyyyMM);
+    if (!date) return yyyyMM;
+    date.setMonth(date.getMonth() + deltaMonths);
+    return dateToMonthYYYYMM(date);
+}
+
+function* iterateMonthsInclusive(fromYYYYMM, toYYYYMM) {
+    const fromDate = monthYYYYMMToDate(fromYYYYMM);
+    const toDate = monthYYYYMMToDate(toYYYYMM);
+    if (!fromDate || !toDate) return;
+
+    const d = new Date(fromDate.getTime());
+    while (d <= toDate) {
+        yield dateToMonthYYYYMM(d);
+        d.setMonth(d.getMonth() + 1);
+    }
+}
+
+function getFixedManualOverrideAmount(costId, monthYYYYMM) {
+    const tx = transactions.find(t => {
+        const m = t.meta || {};
+        return (
+            m.type === 'manual_transaction' &&
+            m.recurringCostId === costId &&
+            m.manualOverrideFor === 'fixo' &&
+            m.month === monthYYYYMM
+        );
+    });
+    return tx ? Math.abs(tx.amount) : null;
+}
+
+function upsertFixedManualOverrideTransaction(cost, monthYYYYMM, amountAbs) {
+    // 1) remove materialização da recorrência fixa naquele mês (pra evitar duplicidade)
+    transactions = transactions.filter(tx => {
+        const m = tx.meta || {};
+        return !(
+            m.type === 'recurring_cost' &&
+            m.recurringCostId === cost.id &&
+            m.month === monthYYYYMM
+        );
+    });
+
+    const existingIdx = transactions.findIndex(tx => {
+        const m = tx.meta || {};
+        return (
+            m.type === 'manual_transaction' &&
+            m.recurringCostId === cost.id &&
+            m.manualOverrideFor === 'fixo' &&
+            m.month === monthYYYYMM
+        );
+    });
+
+    const signedAmount = -Math.abs(amountAbs);
+    const description = `${cost.description} (${monthYYYYMM})`;
+
+    if (existingIdx >= 0) {
+        transactions[existingIdx].description = description;
+        transactions[existingIdx].amount = signedAmount;
+        transactions[existingIdx].area = cost.area ?? '';
+        if (!transactions[existingIdx].meta) transactions[existingIdx].meta = {};
+
+        const m = transactions[existingIdx].meta;
+        m.month = monthYYYYMM;
+        m.recurringCostId = cost.id;
+        m.manualOverrideFor = 'fixo';
+        m.recurringCostType = 'fixo';
+        m.tipo = 'despesa'; // para o formulário
+        m.origem = cost.origem ?? 'Outros';
+        m.status = cost.statusPadrao ?? 'OK';
+        return;
+    }
+
+    transactions.push({
+        id: generateID(),
+        description,
+        amount: signedAmount,
+        area: cost.area ?? '',
+        meta: {
+            type: 'manual_transaction',
+            month: monthYYYYMM,
+            recurringCostId: cost.id,
+            manualOverrideFor: 'fixo',
+            recurringCostType: 'fixo',
+            // dinheiro/fluxo:
+            tipo: 'despesa',
+            origem: cost.origem ?? 'Outros',
+            status: cost.statusPadrao ?? 'OK'
+        }
+    });
+}
+
 function upsertCostTransaction(cost, monthYYYYMM, amountAbs) {
     const expenseAmount = -Math.abs(amountAbs);
     const description = `${cost.description} (${monthYYYYMM})`;
-    const tipoCode = cost.type;
     const origem = cost.origem ?? 'Outros';
-    const status = isVariableTipoCode(cost.type) ? 'OK' : (cost.statusPadrao ?? 'OK');
+    const status = cost.type === 'variavel' ? 'OK' : (cost.statusPadrao ?? 'OK');
 
     if (!Array.isArray(transactions)) return;
 
@@ -516,10 +678,9 @@ function upsertCostTransaction(cost, monthYYYYMM, amountAbs) {
         transactions[idx].amount = expenseAmount;
         transactions[idx].description = description;
         if (!transactions[idx].meta) transactions[idx].meta = {};
-        transactions[idx].meta.creditCardId = cost.creditCardId ?? null;
         transactions[idx].area = cost.area ?? '';
-        transactions[idx].meta.costType = cost.type; // compatibilidade
-        transactions[idx].meta.tipo = tipoCode;
+        transactions[idx].meta.recurringCostType = cost.type;
+        transactions[idx].meta.tipo = cost.type; // compatibilidade com getTipoLabel
         transactions[idx].meta.origem = origem;
         transactions[idx].meta.status = status;
     } else {
@@ -532,9 +693,8 @@ function upsertCostTransaction(cost, monthYYYYMM, amountAbs) {
                 type: metaType,
                 month: monthYYYYMM,
                 recurringCostId: cost.id,
-                creditCardId: cost.creditCardId ?? null,
-                costType: cost.type, // compatibilidade
-                tipo: tipoCode,
+                recurringCostType: cost.type,
+                tipo: cost.type, // compatibilidade
                 origem,
                 status
             }
@@ -571,9 +731,8 @@ function startEditRecurringCost(costId) {
 
     if (costDescriptionInput) costDescriptionInput.value = cost.description ?? '';
     if (costAreaInput) costAreaInput.value = cost.area ?? '';
-    if (costTypeSelect) costTypeSelect.value = cost.type ?? 'temporario_manual';
+    if (costTypeSelect) costTypeSelect.value = cost.type ?? 'fixo';
     if (costAmountInput) costAmountInput.value = Math.abs(cost.amount ?? 0);
-    if (costCreditCardSelect) costCreditCardSelect.value = cost.creditCardId ? String(cost.creditCardId) : '';
     if (costOriginSelect) costOriginSelect.value = cost.origem ?? 'Outros';
     if (costStatusPadraoSelect) costStatusPadraoSelect.value = cost.statusPadrao ?? 'OK';
     if (costStartMonthInput) costStartMonthInput.value = cost.startMonth ?? getCurrentMonthYYYYMM();
@@ -584,28 +743,62 @@ function startEditRecurringCost(costId) {
     if (costDescriptionInput) costDescriptionInput.focus();
 }
 
-function syncExistingTransactionsForRecurringCost(cost) {
+function syncExistingTransactionsForRecurringCost(cost, fromMonthYYYYMM) {
     if (!cost) return;
 
-    // remove meses que não ficam mais ativos
+    const start = fromMonthYYYYMM || (costMonthInput?.value ? costMonthInput.value : getCurrentMonthYYYYMM());
+    const to = addMonthsToMonthYYYYMM(start, POST_HORIZON_MONTHS);
+
+    // Se virou variável, remove overrides fixos manuais daquela recorrência
+    if (cost.type !== 'fixo') {
+        transactions = transactions.filter(tx => {
+            const m = tx.meta || {};
+            return !(
+                m.type === 'manual_transaction' &&
+                m.recurringCostId === cost.id &&
+                m.manualOverrideFor === 'fixo'
+            );
+        });
+    }
+
+    // Remove materializações de recorrência (recurring_cost) que ficaram inválidas no horizonte
     transactions = transactions.filter(tx => {
-        const m = tx.meta;
-        if (!m || m.type !== 'recurring_cost' || m.recurringCostId !== cost.id) return true;
-        return isCostActiveForMonth(cost, m.month);
+        const m = tx.meta || {};
+        if (m.type !== 'recurring_cost' || m.recurringCostId !== cost.id) return true;
+        if (!m.month || m.month < start || m.month > to) return true;
+
+        if (!isCostActiveForMonth(cost, m.month)) return false;
+        if (cost.type === 'fixo') {
+            const hasFixedOverride = getFixedManualOverrideAmount(cost.id, m.month) !== null;
+            if (hasFixedOverride) return false;
+        }
+        return true;
     });
 
-    const existingMonths = new Set(
-        (transactions || [])
-            .filter(tx => tx.meta && tx.meta.type === 'recurring_cost' && tx.meta.recurringCostId === cost.id && tx.meta.month)
-            .map(tx => tx.meta.month)
-    );
+    // (Re)materializa para todos os meses ativos no horizonte
+    for (const monthYYYYMM of iterateMonthsInclusive(start, to)) {
+        if (!isCostActiveForMonth(cost, monthYYYYMM)) continue;
 
-    existingMonths.forEach(month => {
-        const amountAbs = isVariableTipoCode(cost.type)
-            ? (getVariableOverrideAmount(cost.id, month) ?? Math.abs(cost.amount))
-            : Math.abs(cost.amount);
-        upsertCostTransaction(cost, month, amountAbs);
-    });
+        if (cost.type === 'variavel') {
+            const amountAbs = getVariableOverrideAmount(cost.id, monthYYYYMM) ?? 0;
+            upsertCostTransaction(cost, monthYYYYMM, amountAbs);
+        } else {
+            const hasOverride = getFixedManualOverrideAmount(cost.id, monthYYYYMM) !== null;
+            if (!hasOverride) {
+                upsertCostTransaction(cost, monthYYYYMM, Math.abs(cost.amount ?? 0));
+            } else {
+                // garante que recurring_cost não exista enquanto o override manual está presente
+                transactions = transactions.filter(tx => {
+                    const m = tx.meta || {};
+                    return !(
+                        m.type === 'recurring_cost' &&
+                        m.recurringCostId === cost.id &&
+                        m.month === monthYYYYMM
+                    );
+                });
+            }
+        }
+    }
 }
 
 function removeRecurringCost(costId) {
@@ -619,7 +812,10 @@ function removeRecurringCost(costId) {
     variableCostOverrides = variableCostOverrides.filter(o => o.costId !== costId);
     transactions = transactions.filter(tx => {
         const m = tx.meta;
-        return !(m && m.type === 'recurring_cost' && m.recurringCostId === costId);
+        if (!m) return true;
+        if (m.type === 'recurring_cost' && m.recurringCostId === costId) return false;
+        if (m.type === 'manual_transaction' && m.manualOverrideFor === 'fixo' && m.recurringCostId === costId) return false;
+        return true;
     });
 
     setJSONToLocalStorage(STORAGE_KEYS.recurringCosts, recurringCosts);
@@ -630,9 +826,6 @@ function removeRecurringCost(costId) {
 
     if (costMonthInput && costMonthInput.value) {
         renderRecurringCostsForMonth(costMonthInput.value);
-    }
-    if (invoiceMonthInput && invoiceMonthInput.value) {
-        renderInvoicesForMonth(invoiceMonthInput.value);
     }
     if (typeof renderAnalyticsForMonth === 'function' && analyticsMonthInput && analyticsMonthInput.value) {
         renderAnalyticsForMonth(analyticsMonthInput.value);
@@ -648,31 +841,6 @@ if (costRecurringCancelBtn) {
         if (collapsible) collapsible.classList.remove('expanded');
         showToast('Edição cancelada.');
     });
-}
-
-function renderCostCreditCardSelectOptions() {
-    if (!costCreditCardSelect) return;
-
-    const currentValue = costCreditCardSelect.value;
-    costCreditCardSelect.innerHTML = '';
-
-    const noneOpt = document.createElement('option');
-    noneOpt.value = '';
-    noneOpt.textContent = 'Sem cartão';
-    costCreditCardSelect.appendChild(noneOpt);
-
-    creditCards.forEach(card => {
-        const opt = document.createElement('option');
-        opt.value = String(card.id);
-        opt.textContent = card.name;
-        costCreditCardSelect.appendChild(opt);
-    });
-
-    if (currentValue && creditCards.some(c => String(c.id) === currentValue)) {
-        costCreditCardSelect.value = currentValue;
-    } else {
-        costCreditCardSelect.value = '';
-    }
 }
 
 function renderRecurringCostsForMonth(monthYYYYMM) {
@@ -696,20 +864,15 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
     }
 
     activeCosts.forEach(cost => {
-        const amount =
-            isVariableTipoCode(cost.type)
-                ? (overridesMap.has(cost.id)
-                    ? Math.abs(overridesMap.get(cost.id))
-                    : Math.abs(cost.amount))
-                : Math.abs(cost.amount);
+        let amount = 0;
+        if (cost.type === 'fixo') {
+            amount = getFixedManualOverrideAmount(cost.id, monthYYYYMM) ?? Math.abs(cost.amount ?? 0);
+        } else {
+            // variável: por padrão é 0.00; se existir override no mês, usa ele
+            amount = overridesMap.has(cost.id) ? Math.abs(overridesMap.get(cost.id)) : 0;
+        }
 
         total += amount;
-
-        const costCardId = cost.creditCardId ?? null;
-        const cardName =
-            costCardId
-                ? (creditCards.find(c => String(c.id) === String(costCardId))?.name ?? 'Cartão')
-                : 'Sem cartão';
         const areaName = cost.area ? String(cost.area) : 'Sem área';
         const origemName = cost.origem ? String(cost.origem) : 'Outros';
         const statusName = isVariableTipoCode(cost.type) ? 'OK' : (cost.statusPadrao ?? 'OK');
@@ -720,25 +883,20 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
         li.innerHTML = `
             <div class="cost-left">
                 <div class="cost-description">${cost.description}</div>
-                <div class="cost-meta">Tipo: ${getTipoLabel(cost.type)} | Origem: ${origemName} | Status: ${statusName} | Cartão: ${cardName} | Área: ${areaName}</div>
+                <div class="cost-meta">Tipo: ${getTipoLabel(cost.type)} | Origem: ${origemName} | Status: ${statusName} | Área: ${areaName}</div>
             </div>
             <div class="cost-right">
                 <div class="cost-value">
-                    ${
-                        isVariableTipoCode(cost.type)
-                            ? `
-                                <div class="cost-amount-input-wrap">
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        class="variable-amount-input"
-                                        data-cost-id="${cost.id}"
-                                        value="${amount.toFixed(2)}"
-                                    />
-                                </div>
-                              `
-                            : `<div class="cost-amount-display">R$ ${amount.toFixed(2)}</div>`
-                    }
+                    <div class="cost-amount-input-wrap">
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            class="recurring-amount-input"
+                            data-cost-id="${cost.id}"
+                            value="${amount.toFixed(2)}"
+                        />
+                    </div>
                 </div>
 
                 <div class="cost-actions" aria-hidden="true">
@@ -763,25 +921,29 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
             </div>
         `;
 
-        if (isVariableTipoCode(cost.type)) {
-            const input = li.querySelector('.variable-amount-input');
+        const input = li.querySelector('.recurring-amount-input');
+        if (input) {
             input.addEventListener('change', (e) => {
                 const value = +e.target.value;
                 const clean = Number.isFinite(value) ? Math.abs(value) : 0;
-                setVariableOverrideAmount(cost.id, monthYYYYMM, clean);
 
-                // Mantem o histórico sincronizado para este custo/mês
-                upsertCostTransaction(cost, monthYYYYMM, clean);
+                if (cost.type === 'variavel') {
+                    setVariableOverrideAmount(cost.id, monthYYYYMM, clean);
+                    upsertCostTransaction(cost, monthYYYYMM, clean);
+                } else {
+                    upsertFixedManualOverrideTransaction(cost, monthYYYYMM, clean);
+                    saveTransactionsToLocalStorage(transactions);
+                }
 
-                // Re-renderiza saldo e histórico (mesmo estando em outra "tela")
                 init();
                 renderRecurringCostsForMonth(monthYYYYMM);
-                if (invoiceMonthInput && invoiceMonthInput.value === monthYYYYMM) {
-                    renderInvoicesForMonth(monthYYYYMM);
+                const anaMonthInput = document.getElementById('analytics-month');
+                if (anaMonthInput && anaMonthInput.value === monthYYYYMM && typeof renderAnalyticsForMonth === 'function') {
+                    renderAnalyticsForMonth(monthYYYYMM);
                 }
 
                 if (postMonthCostsHint) {
-                    postMonthCostsHint.textContent = 'Valor variável atualizado no histórico.';
+                    postMonthCostsHint.textContent = 'Valor atualizado no histórico para o mês selecionado.';
                 }
             });
         }
@@ -793,28 +955,63 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
 }
 
 function postMonthCostsToHistory() {
-    const monthYYYYMM = costMonthInput ? costMonthInput.value : '';
-    if (!monthYYYYMM) return;
+    const fromMonthYYYYMM = costMonthInput ? costMonthInput.value : '';
+    if (!fromMonthYYYYMM) return;
 
-    const activeCosts = recurringCosts.filter(c => isCostActiveForMonth(c, monthYYYYMM));
+    const toMonthYYYYMM = addMonthsToMonthYYYYMM(fromMonthYYYYMM, POST_HORIZON_MONTHS);
 
-    activeCosts.forEach(cost => {
-        const amount =
-            isVariableTipoCode(cost.type)
-                ? getVariableOverrideAmount(cost.id, monthYYYYMM) ?? Math.abs(cost.amount)
-                : Math.abs(cost.amount);
-
-        upsertCostTransaction(cost, monthYYYYMM, amount);
+    // Limpa materializações antigas dentro do horizonte quando a recorrência não está ativa mais.
+    transactions = transactions.filter(tx => {
+        const m = tx.meta || {};
+        if (m.type === 'recurring_cost') {
+            if (!m.month || m.month < fromMonthYYYYMM || m.month > toMonthYYYYMM) return true;
+            const cost = recurringCosts.find(c => c.id === m.recurringCostId);
+            if (!cost) return false;
+            return isCostActiveForMonth(cost, m.month);
+        }
+        if (m.type === 'manual_transaction' && m.manualOverrideFor === 'fixo') {
+            if (!m.month || m.month < fromMonthYYYYMM || m.month > toMonthYYYYMM) return true;
+            const cost = recurringCosts.find(c => c.id === m.recurringCostId);
+            if (!cost) return false;
+            return isCostActiveForMonth(cost, m.month);
+        }
+        return true;
     });
 
-    init();
-    if (postMonthCostsHint) {
-        postMonthCostsHint.textContent = 'Custos lançados/atualizados no histórico.';
+    // (Re)materializa para todos os meses futuros onde a recorrência está ativa
+    for (const cost of recurringCosts) {
+        for (const monthYYYYMM of iterateMonthsInclusive(fromMonthYYYYMM, toMonthYYYYMM)) {
+            if (!isCostActiveForMonth(cost, monthYYYYMM)) continue;
+
+            if (cost.type === 'variavel') {
+                const amountAbs = getVariableOverrideAmount(cost.id, monthYYYYMM) ?? 0;
+                upsertCostTransaction(cost, monthYYYYMM, amountAbs);
+            } else {
+                const hasOverride = getFixedManualOverrideAmount(cost.id, monthYYYYMM) !== null;
+                if (hasOverride) {
+                    // garante que não existe recurring_cost materializado para esse mês
+                    transactions = transactions.filter(tx => {
+                        const m = tx.meta || {};
+                        return !(
+                            m.type === 'recurring_cost' &&
+                            m.recurringCostId === cost.id &&
+                            m.month === monthYYYYMM
+                        );
+                    });
+                } else {
+                    upsertCostTransaction(cost, monthYYYYMM, Math.abs(cost.amount ?? 0));
+                }
+            }
+        }
     }
+
+    init();
+    if (postMonthCostsHint) postMonthCostsHint.textContent = 'Custos lançados/atualizados no histórico (futuros)!';
     showToast('Custos lançados no histórico com sucesso!');
 
-    if (invoiceMonthInput && invoiceMonthInput.value === monthYYYYMM) {
-        renderInvoicesForMonth(monthYYYYMM);
+    const anaMonth = document.getElementById('analytics-month');
+    if (anaMonth && anaMonth.value && typeof renderAnalyticsForMonth === 'function' && anaMonth.value === fromMonthYYYYMM) {
+        renderAnalyticsForMonth(fromMonthYYYYMM);
     }
 }
 
@@ -831,6 +1028,9 @@ if (costMonthInput) {
         renderRecurringCostsForMonth(costMonthInput.value);
         if (postMonthCostsHint) postMonthCostsHint.textContent = '';
     });
+
+    // Render inicial das recorrências
+    renderRecurringCostsForMonth(costMonthInput.value);
 }
 
 if (costRecurringForm) {
@@ -845,10 +1045,7 @@ if (costRecurringForm) {
         const endMonth = endMonthRaw ? endMonthRaw : null;
         const origem = costOriginSelect ? costOriginSelect.value : 'Outros';
         let statusPadrao = costStatusPadraoSelect ? costStatusPadraoSelect.value : 'OK';
-        if (type !== 'fixo_automatico') {
-            // As categorias manuais (fixo manual/variável manual/temporário manual) devem sair como OK por padrão
-            statusPadrao = 'OK';
-        }
+        // para este modelo simplificado, respeitamos o status padrão selecionado
 
         if (!description || !type || !origem || !startMonth || !Number.isFinite(amount)) {
             setInvalid(costAmountInput, true);
@@ -857,9 +1054,8 @@ if (costRecurringForm) {
         }
         setInvalid(costAmountInput, false);
 
-        const creditCardIdRaw = costCreditCardSelect ? costCreditCardSelect.value : '';
-        const creditCardId = creditCardIdRaw ? +creditCardIdRaw : null;
         const area = costAreaInput ? costAreaInput.value.trim() : '';
+        const storedAmount = type === 'variavel' ? 0 : Math.abs(amount);
 
         const isEditing = editingRecurringCostId !== null;
         const target = isEditing ? recurringCosts.find(c => c.id === editingRecurringCostId) : null;
@@ -870,11 +1066,10 @@ if (costRecurringForm) {
 
             target.description = description;
             target.type = type;
-            target.amount = Math.abs(amount);
+            target.amount = storedAmount;
             target.area = area;
             target.startMonth = startMonth;
             target.endMonth = endMonth;
-            target.creditCardId = creditCardId;
             target.origem = origem;
             target.statusPadrao = statusPadrao;
 
@@ -884,33 +1079,29 @@ if (costRecurringForm) {
             }
 
             setJSONToLocalStorage(STORAGE_KEYS.recurringCosts, recurringCosts);
-            syncExistingTransactionsForRecurringCost(target);
+            syncExistingTransactionsForRecurringCost(target, costMonthInput?.value);
             init();
         } else {
             const recurringCost = {
                 id: generateID(),
                 description,
                 type,
-                amount: Math.abs(amount),
+                amount: storedAmount,
                 area,
                 startMonth,
                 endMonth,
-                creditCardId,
                 origem,
                 statusPadrao
             };
 
             recurringCosts.push(recurringCost);
             setJSONToLocalStorage(STORAGE_KEYS.recurringCosts, recurringCosts);
+            syncExistingTransactionsForRecurringCost(recurringCost, costMonthInput?.value);
         }
 
         // Re-renderiza a lista do mês atual
         if (costMonthInput) {
             renderRecurringCostsForMonth(costMonthInput.value);
-        }
-
-        if (invoiceMonthInput && invoiceMonthInput.value) {
-            renderInvoicesForMonth(invoiceMonthInput.value);
         }
 
         if (!isEditing) costDescriptionInput.value = '';
@@ -934,651 +1125,6 @@ if (postMonthCostsBtn) {
 }
 
 // -------------------------
-// Cartões de Crédito (novo)
-// -------------------------
-const creditCardsList = document.getElementById('credit-cards-list');
-const creditCardForm = document.getElementById('credit-card-form');
-const creditCardNameInput = document.getElementById('credit-card-name');
-const creditCardAnnualTotalInput = document.getElementById('credit-card-annual-total');
-
-function renderCreditCardsList() {
-    if (!creditCardsList) return;
-
-    creditCardsList.innerHTML = '';
-
-    if (!Array.isArray(creditCards) || creditCards.length === 0) {
-        const li = document.createElement('li');
-        li.className = 'empty-list-item';
-        li.textContent = 'Nenhum cartão cadastrado.';
-        creditCardsList.appendChild(li);
-        return;
-    }
-
-    creditCards.forEach(card => {
-        const avgMonthly = Math.abs(card.annualTotal) / 12;
-
-        const li = document.createElement('li');
-        li.className = 'credit-card-item';
-        li.innerHTML = `
-            <div class="credit-card-left">
-                <div class="credit-card-name">${card.name}</div>
-                <div class="credit-card-meta">Média mensal: R$ ${avgMonthly.toFixed(2)}</div>
-            </div>
-            <div class="credit-card-right">
-                <div class="credit-card-total">R$ ${Math.abs(card.annualTotal).toFixed(2)} / ano</div>
-                <div class="credit-card-actions" aria-hidden="true">
-                    <button class="icon-action-btn" type="button" onclick="startEditCreditCard(${card.id})" aria-label="Editar cartão" title="Editar">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M12 20h9"></path>
-                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
-                        </svg>
-                        <span class="btn-text">Editar</span>
-                    </button>
-                    <button class="icon-action-btn recurring-remove-btn" type="button" onclick="removeCreditCard(${card.id})" aria-label="Remover cartão" title="Remover">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M3 6h18"></path>
-                            <path d="M8 6V4h8v2"></path>
-                            <path d="M19 6l-1 14H6L5 6"></path>
-                            <path d="M10 11v6"></path>
-                            <path d="M14 11v6"></path>
-                        </svg>
-                        <span class="btn-text">Remover</span>
-                    </button>
-                </div>
-            </div>
-        `;
-
-        creditCardsList.appendChild(li);
-    });
-}
-
-function startEditCreditCard(cardId) {
-    const card = creditCards.find(c => c.id === cardId);
-    if (!card) return;
-
-    if (creditCardNameInput) creditCardNameInput.value = card.name ?? '';
-    if (creditCardAnnualTotalInput) creditCardAnnualTotalInput.value = Math.abs(card.annualTotal ?? 0);
-
-    showToast('Editando cartão...');
-}
-
-function removeCreditCard(cardId) {
-    const card = creditCards.find(c => c.id === cardId);
-    if (!card) return;
-
-    const confirmed = confirm(`Remover o cartão "${card.name}"?`);
-    if (!confirmed) return;
-
-    creditCards = creditCards.filter(c => c.id !== cardId);
-
-    // remove statements do cartão
-    creditCardMonthlyStatements = (creditCardMonthlyStatements || []).filter(s => String(s.creditCardId) !== String(cardId));
-
-    // limpa referência do cartão nas recorrências
-    recurringCosts = recurringCosts.map(c => (String(c.creditCardId) === String(cardId) ? { ...c, creditCardId: null } : c));
-
-    // atualiza transações existentes vinculadas ao cartão
-    transactions = (transactions || []).map(tx => {
-        const meta = tx.meta || {};
-        if (meta.type === 'recurring_cost' && meta.recurringCostId) {
-            const cost = recurringCosts.find(c => c.id === meta.recurringCostId);
-            meta.creditCardId = cost ? cost.creditCardId ?? null : null;
-            return { ...tx, meta };
-        }
-        if (meta.type === 'credit_card_purchase' && meta.creditCardId && String(meta.creditCardId) === String(cardId)) {
-            meta.creditCardId = null;
-            return { ...tx, meta };
-        }
-        return tx;
-    });
-
-    setJSONToLocalStorage(STORAGE_KEYS.creditCards, creditCards);
-    setJSONToLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, creditCardMonthlyStatements);
-    setJSONToLocalStorage(STORAGE_KEYS.recurringCosts, recurringCosts);
-    saveTransactionsToLocalStorage(transactions);
-
-    renderCreditCardsList();
-    if (typeof renderCostCreditCardSelectOptions === 'function') renderCostCreditCardSelectOptions();
-    if (typeof renderPurchaseCardSelectOptions === 'function') renderPurchaseCardSelectOptions();
-    if (typeof renderCardStatementSelectOptions === 'function') renderCardStatementSelectOptions();
-
-    if (costMonthInput && costMonthInput.value) renderRecurringCostsForMonth(costMonthInput.value);
-    if (invoiceMonthInput && invoiceMonthInput.value) renderInvoicesForMonth(invoiceMonthInput.value);
-    if (analyticsMonthInput && analyticsMonthInput.value) renderAnalyticsForMonth(analyticsMonthInput.value);
-
-    init();
-    showToast('Cartão removido com sucesso!');
-}
-
-if (creditCardForm) {
-    creditCardForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-
-        const name = creditCardNameInput.value.trim();
-        const annualTotal = +creditCardAnnualTotalInput.value;
-
-        if (!name || !Number.isFinite(annualTotal)) {
-            alert('Preencha nome do cartão e valor anual.');
-            return;
-        }
-
-        const cleanAnnualTotal = Math.abs(annualTotal);
-
-        const existingIndex = creditCards.findIndex(c => c.name && c.name.trim().toLowerCase() === name.toLowerCase());
-        if (existingIndex >= 0) {
-            creditCards[existingIndex].annualTotal = cleanAnnualTotal;
-        } else {
-            creditCards.push({
-                id: generateID(),
-                name,
-                annualTotal: cleanAnnualTotal
-            });
-        }
-
-        setJSONToLocalStorage(STORAGE_KEYS.creditCards, creditCards);
-        renderCreditCardsList();
-        renderCostCreditCardSelectOptions();
-        if (typeof renderCardStatementSelectOptions === 'function') {
-            renderCardStatementSelectOptions();
-        }
-        if (typeof renderPurchaseCardSelectOptions === 'function') {
-            renderPurchaseCardSelectOptions();
-        }
-        if (invoiceMonthInput && invoiceMonthInput.value) {
-            renderInvoicesForMonth(invoiceMonthInput.value);
-        }
-
-        showToast('Cartão salvo com sucesso!');
-
-        creditCardNameInput.value = '';
-        creditCardAnnualTotalInput.value = '';
-    });
-}
-
-// Render inicial das novas telas (se existir)
-if (costMonthInput) {
-    renderRecurringCostsForMonth(costMonthInput.value);
-}
-renderCreditCardsList();
-
-// -------------------------
-// Fatura por Cartão (novo)
-// -------------------------
-const invoiceMonthInput = document.getElementById('invoice-month');
-const invoiceList = document.getElementById('invoice-list');
-const invoiceMonthlyTotalEl = document.getElementById('invoice-monthly-total');
-
-function renderInvoicesForMonth(monthYYYYMM) {
-    if (!invoiceList || !invoiceMonthlyTotalEl) return;
-
-    const activeCosts = recurringCosts.filter(c => isCostActiveForMonth(c, monthYYYYMM));
-    const overridesForMonth = variableCostOverrides.filter(o => o.month === monthYYYYMM);
-    const overridesMap = new Map(overridesForMonth.map(o => [o.costId, o.amount]));
-
-    const grouped = new Map();
-    activeCosts.forEach(cost => {
-        const amount =
-            isVariableTipoCode(cost.type)
-                ? (overridesMap.has(cost.id)
-                    ? Math.abs(overridesMap.get(cost.id))
-                    : Math.abs(cost.amount))
-                : Math.abs(cost.amount);
-
-        const cardKey = cost.creditCardId ? String(cost.creditCardId) : 'none';
-        if (!grouped.has(cardKey)) {
-            const card = cost.creditCardId ? creditCards.find(c => String(c.id) === cardKey) : null;
-            const cardName = cardKey === 'none' ? 'Sem cartão' : (card?.name ?? 'Cartão');
-            grouped.set(cardKey, { cardName, total: 0 });
-        }
-        grouped.get(cardKey).total += amount;
-    });
-
-    // Inclui compras lançadas diretamente no cartão (avulsas) do mês
-    const purchasesForMonth = transactions.filter(t => {
-        const status = t.meta?.status ?? 'OK';
-        return t.amount < 0 && t.meta && t.meta.type === 'credit_card_purchase' && t.meta.month === monthYYYYMM && status !== 'Pendente';
-    });
-
-    purchasesForMonth.forEach(tx => {
-        const cardId = tx.meta && tx.meta.creditCardId ? tx.meta.creditCardId : null;
-        const cardKey = cardId ? String(cardId) : 'none';
-
-        if (!grouped.has(cardKey)) {
-            const card = cardId ? creditCards.find(c => String(c.id) === String(cardId)) : null;
-            const cardName = cardKey === 'none' ? 'Sem cartão' : (card?.name ?? 'Cartão');
-            grouped.set(cardKey, { cardName, total: 0 });
-        }
-
-        grouped.get(cardKey).total += Math.abs(tx.amount);
-    });
-
-    const groupsArr = Array.from(grouped.entries())
-        .map(([key, v]) => ({ key, ...v }))
-        .sort((a, b) => a.cardName.localeCompare(b.cardName, 'pt-BR'));
-
-    invoiceList.innerHTML = '';
-
-    const total = groupsArr.reduce((acc, g) => acc + g.total, 0);
-    invoiceMonthlyTotalEl.textContent = `R$ ${total.toFixed(2)}`;
-
-    if (groupsArr.length === 0) {
-        const li = document.createElement('li');
-        li.className = 'empty-list-item';
-        li.textContent = 'Nenhum custo/compra no cartão para este mês.';
-        invoiceList.appendChild(li);
-        return;
-    }
-
-    groupsArr.forEach(g => {
-        const li = document.createElement('li');
-        li.className = 'invoice-item';
-        li.innerHTML = `
-            <div class="invoice-name">${g.cardName}</div>
-            <div class="invoice-total">R$ ${g.total.toFixed(2)}</div>
-        `;
-        invoiceList.appendChild(li);
-    });
-}
-
-if (invoiceMonthInput) {
-    if (!invoiceMonthInput.value) {
-        const defaultMonth = (costMonthInput && costMonthInput.value) ? costMonthInput.value : getCurrentMonthYYYYMM();
-        invoiceMonthInput.value = defaultMonth;
-    }
-
-    invoiceMonthInput.addEventListener('change', () => {
-        renderInvoicesForMonth(invoiceMonthInput.value);
-    });
-
-    renderInvoicesForMonth(invoiceMonthInput.value);
-}
-
-renderCostCreditCardSelectOptions();
-
-// -------------------------
-// Cartões: lançamento avulso por mês
-// -------------------------
-const purchaseMonthInput = document.getElementById('purchase-month');
-const purchaseCardSelect = document.getElementById('purchase-card-select');
-const purchaseForm = document.getElementById('credit-card-purchase-form');
-const purchaseDescriptionInput = document.getElementById('purchase-description');
-const purchaseAmountInput = document.getElementById('purchase-amount');
-const purchaseAreaInput = document.getElementById('purchase-area');
-const purchaseOriginSelect = document.getElementById('purchase-origin');
-const purchaseStatusSelect = document.getElementById('purchase-status');
-
-function renderPurchaseCardSelectOptions() {
-    if (!purchaseCardSelect) return;
-
-    const currentValue = purchaseCardSelect.value;
-    purchaseCardSelect.innerHTML = '';
-
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = 'Selecione';
-    purchaseCardSelect.appendChild(placeholder);
-
-    (creditCards || []).forEach(card => {
-        const opt = document.createElement('option');
-        opt.value = String(card.id);
-        opt.textContent = card.name;
-        purchaseCardSelect.appendChild(opt);
-    });
-
-    if (currentValue && creditCards.some(c => String(c.id) === String(currentValue))) {
-        purchaseCardSelect.value = currentValue;
-    }
-}
-
-if (purchaseMonthInput && !purchaseMonthInput.value) {
-    purchaseMonthInput.value = invoiceMonthInput && invoiceMonthInput.value ? invoiceMonthInput.value : getCurrentMonthYYYYMM();
-}
-
-if (invoiceMonthInput && purchaseMonthInput) {
-    invoiceMonthInput.addEventListener('change', () => {
-        purchaseMonthInput.value = invoiceMonthInput.value;
-    });
-}
-
-if (purchaseForm) {
-    renderPurchaseCardSelectOptions();
-
-    purchaseForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-
-        const monthYYYYMM = purchaseMonthInput ? purchaseMonthInput.value : '';
-        const cardIdRaw = purchaseCardSelect ? purchaseCardSelect.value : '';
-        const cardId = cardIdRaw ? +cardIdRaw : null;
-        const description = purchaseDescriptionInput ? purchaseDescriptionInput.value.trim() : '';
-        const amount = purchaseAmountInput ? +purchaseAmountInput.value : NaN;
-        const area = purchaseAreaInput ? purchaseAreaInput.value.trim() : '';
-        const origem = purchaseOriginSelect ? purchaseOriginSelect.value : 'Cartão';
-        const status = purchaseStatusSelect ? purchaseStatusSelect.value : 'OK';
-
-        if (!monthYYYYMM || !cardId || !description || !Number.isFinite(amount) || !origem || !status) {
-            setInvalid(purchaseAmountInput, true);
-            alert('Preencha mês, cartão, descrição e valor.');
-            return;
-        }
-        setInvalid(purchaseAmountInput, false);
-
-        const tx = {
-            id: generateID(),
-            description: description,
-            amount: -Math.abs(amount),
-            area,
-            meta: {
-                type: 'credit_card_purchase',
-                month: monthYYYYMM,
-                creditCardId: cardId,
-                costType: 'temporario_manual',
-                tipo: 'temporario_manual',
-                origem,
-                status
-            }
-        };
-
-        transactions.push(tx);
-        addTransactionDOM(tx);
-        updateBalance();
-        saveTransactionsToLocalStorage(transactions);
-
-        if (invoiceMonthInput && invoiceMonthInput.value === monthYYYYMM) {
-            renderInvoicesForMonth(monthYYYYMM);
-        }
-        if (analyticsMonthInput && analyticsMonthInput.value === monthYYYYMM) {
-            renderAnalyticsForMonth(monthYYYYMM);
-        }
-
-        showToast('Compra no cartão lançada com sucesso!');
-
-        if (purchaseDescriptionInput) purchaseDescriptionInput.value = '';
-        if (purchaseAmountInput) purchaseAmountInput.value = '';
-        if (purchaseAreaInput) purchaseAreaInput.value = '';
-    });
-}
-
-// -------------------------
-// Cartões: fechamento do cartão por mês (deduções)
-// -------------------------
-const cardStatementMonthInput = document.getElementById('card-statement-month');
-const cardStatementSelect = document.getElementById('card-statement-select');
-const cardStatementClosingTotalInput = document.getElementById('card-statement-closing-total');
-const cardStatementSaveBtn = document.getElementById('card-statement-save-btn');
-const cardStatementUsedTotalEl = document.getElementById('card-statement-used-total');
-const cardStatementRemainingTotalEl = document.getElementById('card-statement-remaining-total');
-
-const cardStatementItemForm = document.getElementById('card-statement-item-form');
-const cardStatementItemDescriptionInput = document.getElementById('card-statement-item-description');
-const cardStatementItemAmountInput = document.getElementById('card-statement-item-amount');
-const cardStatementItemAreaInput = document.getElementById('card-statement-item-area');
-const cardStatementItemOriginSelect = document.getElementById('card-statement-item-origin');
-const cardStatementItemStatusSelect = document.getElementById('card-statement-item-status');
-const cardStatementItemList = document.getElementById('card-statement-item-list');
-
-function renderCardStatementSelectOptions() {
-    if (!cardStatementSelect) return;
-
-    const currentValue = cardStatementSelect.value;
-    cardStatementSelect.innerHTML = '';
-
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = 'Selecione';
-    cardStatementSelect.appendChild(placeholder);
-
-    (creditCards || []).forEach(card => {
-        const opt = document.createElement('option');
-        opt.value = String(card.id);
-        opt.textContent = card.name;
-        cardStatementSelect.appendChild(opt);
-    });
-
-    if (currentValue && creditCards.some(c => String(c.id) === String(currentValue))) {
-        cardStatementSelect.value = currentValue;
-    }
-}
-
-function findCardStatementIndex(creditCardId, monthYYYYMM) {
-    return (creditCardMonthlyStatements || []).findIndex(s => {
-        return String(s.creditCardId) === String(creditCardId) && s.month === monthYYYYMM;
-    });
-}
-
-function getSelectedStatementContext() {
-    const monthYYYYMM = cardStatementMonthInput ? cardStatementMonthInput.value : '';
-    const creditCardIdRaw = cardStatementSelect ? cardStatementSelect.value : '';
-    const creditCardId = creditCardIdRaw ? +creditCardIdRaw : null;
-    return { monthYYYYMM, creditCardId };
-}
-
-function upsertCardStatement(creditCardId, monthYYYYMM) {
-    if (!creditCardId || !monthYYYYMM) return null;
-
-    const idx = findCardStatementIndex(creditCardId, monthYYYYMM);
-    if (idx >= 0) return creditCardMonthlyStatements[idx];
-
-    const created = {
-        id: generateID(),
-        creditCardId,
-        month: monthYYYYMM,
-        closingTotal: 0,
-        items: []
-    };
-
-    creditCardMonthlyStatements.push(created);
-    setJSONToLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, creditCardMonthlyStatements);
-    return created;
-}
-
-function calculateCardStatementTotals(statement) {
-    const closingTotal = statement && Number.isFinite(+statement.closingTotal) ? +statement.closingTotal : 0;
-    const items = statement && Array.isArray(statement.items) ? statement.items : [];
-    const usedTotal = items.reduce((acc, it) => {
-        const status = it && it.status ? it.status : 'OK';
-        if (status !== 'OK') return acc;
-        const amt = Math.abs(Number(it.amount) || 0);
-        return acc + amt;
-    }, 0);
-    const remaining = closingTotal - usedTotal;
-    return { closingTotal, usedTotal, remaining };
-}
-
-function renderCardStatementForSelected() {
-    if (!cardStatementMonthInput || !cardStatementSelect || !cardStatementClosingTotalInput) return;
-
-    const { monthYYYYMM, creditCardId } = getSelectedStatementContext();
-    if (!monthYYYYMM || !creditCardId) return;
-
-    const idx = findCardStatementIndex(creditCardId, monthYYYYMM);
-    const statement = idx >= 0 ? creditCardMonthlyStatements[idx] : null;
-
-    const totals = calculateCardStatementTotals(statement || {
-        creditCardId,
-        month: monthYYYYMM,
-        closingTotal: 0,
-        items: []
-    });
-
-    // Sincroniza input e totais
-    cardStatementClosingTotalInput.value = statement && Number.isFinite(+statement.closingTotal) ? +statement.closingTotal : '';
-    if (cardStatementUsedTotalEl) cardStatementUsedTotalEl.textContent = `R$ ${totals.usedTotal.toFixed(2)}`;
-    if (cardStatementRemainingTotalEl) cardStatementRemainingTotalEl.textContent = `R$ ${totals.remaining.toFixed(2)}`;
-
-    // Itens
-    if (!cardStatementItemList) return;
-    cardStatementItemList.innerHTML = '';
-
-    const items = statement && Array.isArray(statement.items) ? statement.items : [];
-    if (items.length === 0) {
-        const li = document.createElement('li');
-        li.className = 'empty-list-item';
-        li.textContent = 'Nenhuma despesa deduzida para este fechamento.';
-        cardStatementItemList.appendChild(li);
-        return;
-    }
-
-    items.forEach(item => {
-        const li = document.createElement('li');
-        li.className = 'statement-item';
-        li.dataset.itemId = String(item.id);
-        li.innerHTML = `
-            <div class="statement-left">
-                <div class="statement-desc">${item.description}</div>
-                <div class="statement-meta">${[
-                    item.area ? `Área: ${item.area}` : 'Área: (não informada)',
-                    item.origem ? `Origem: ${item.origem}` : '',
-                    item.status ? `Status: ${item.status}` : ''
-                ].filter(Boolean).join(' | ')}</div>
-            </div>
-            <div class="statement-right" style="display:flex; gap:10px; align-items:center;">
-                <div class="invoice-total">R$ ${Number(item.amount).toFixed(2)}</div>
-                <button class="remove-btn" type="button" onclick="removeCardStatementItemById(${item.id})" aria-label="Remover">
-                    <span class="action-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M3 6h18"></path>
-                            <path d="M8 6V4h8v2"></path>
-                            <path d="M19 6l-1 14H6L5 6"></path>
-                            <path d="M10 11v6"></path>
-                            <path d="M14 11v6"></path>
-                        </svg>
-                    </span>
-                    Remover
-                </button>
-            </div>
-        `;
-        cardStatementItemList.appendChild(li);
-    });
-}
-
-function removeCardStatementItemById(itemId) {
-    if (!itemId) return;
-
-    let changed = false;
-    creditCardMonthlyStatements = (creditCardMonthlyStatements || []).map(statement => {
-        const items = Array.isArray(statement.items) ? statement.items : [];
-        const filtered = items.filter(it => it.id !== itemId);
-        if (filtered.length !== items.length) changed = true;
-        return { ...statement, items: filtered };
-    });
-
-    if (!changed) return;
-    setJSONToLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, creditCardMonthlyStatements);
-
-    renderCardStatementForSelected();
-    if (typeof renderAnalyticsForMonth === 'function' && analyticsMonthInput && analyticsMonthInput.value) {
-        renderAnalyticsForMonth(analyticsMonthInput.value);
-    }
-    showToast('Item removido do fechamento.');
-}
-
-if (cardStatementMonthInput && cardStatementSelect) {
-    if (!cardStatementMonthInput.value) {
-        cardStatementMonthInput.value = getCurrentMonthYYYYMM();
-    }
-
-    renderCardStatementSelectOptions();
-
-    cardStatementMonthInput.addEventListener('change', () => {
-        renderCardStatementForSelected();
-        if (analyticsMonthInput && analyticsMonthInput.value === cardStatementMonthInput.value && typeof renderAnalyticsForMonth === 'function') {
-            renderAnalyticsForMonth(cardStatementMonthInput.value);
-        }
-    });
-
-    cardStatementSelect.addEventListener('change', () => {
-        renderCardStatementForSelected();
-    });
-}
-
-if (cardStatementSaveBtn) {
-    cardStatementSaveBtn.addEventListener('click', () => {
-        const { monthYYYYMM, creditCardId } = getSelectedStatementContext();
-        if (!monthYYYYMM || !creditCardId) {
-            alert('Selecione cartão e mês.');
-            return;
-        }
-
-        const closingTotal = +cardStatementClosingTotalInput.value;
-        if (!Number.isFinite(closingTotal)) {
-            alert('Informe o valor de fechamento.');
-            return;
-        }
-
-        const statement = upsertCardStatement(creditCardId, monthYYYYMM);
-        if (!statement) return;
-
-        statement.closingTotal = Math.abs(closingTotal);
-        setJSONToLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, creditCardMonthlyStatements);
-
-        renderCardStatementForSelected();
-        if (typeof renderAnalyticsForMonth === 'function' && analyticsMonthInput && analyticsMonthInput.value === monthYYYYMM) {
-            renderAnalyticsForMonth(monthYYYYMM);
-        }
-        showToast('Fechamento do cartão salvo com sucesso!');
-    });
-}
-
-if (cardStatementItemForm) {
-    cardStatementItemForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-
-        const { monthYYYYMM, creditCardId } = getSelectedStatementContext();
-        if (!monthYYYYMM || !creditCardId) {
-            alert('Selecione cartão e mês.');
-            return;
-        }
-
-        const description = cardStatementItemDescriptionInput ? cardStatementItemDescriptionInput.value.trim() : '';
-        const amount = cardStatementItemAmountInput ? +cardStatementItemAmountInput.value : NaN;
-        const area = cardStatementItemAreaInput ? cardStatementItemAreaInput.value.trim() : '';
-        const origem = cardStatementItemOriginSelect ? cardStatementItemOriginSelect.value : 'Cartão';
-        const status = cardStatementItemStatusSelect ? cardStatementItemStatusSelect.value : 'OK';
-
-        if (!description || !Number.isFinite(amount) || !origem || !status) {
-            setInvalid(cardStatementItemAmountInput, true);
-            alert('Preencha descrição, valor, origem e status.');
-            return;
-        }
-        setInvalid(cardStatementItemAmountInput, false);
-
-        const statement = upsertCardStatement(creditCardId, monthYYYYMM);
-        if (!statement) return;
-
-        if (!Array.isArray(statement.items)) statement.items = [];
-        statement.items.push({
-            id: generateID(),
-            description,
-            amount: Math.abs(amount),
-            area,
-            origem,
-            status,
-            tipo: 'temporario_manual'
-        });
-
-        // Se o fechamento ainda não existir, tenta usar o valor digitado
-        if (!Number.isFinite(+statement.closingTotal) || +statement.closingTotal === 0) {
-            const closingInput = +cardStatementClosingTotalInput.value;
-            if (Number.isFinite(closingInput)) statement.closingTotal = Math.abs(closingInput);
-        }
-
-        setJSONToLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, creditCardMonthlyStatements);
-
-        // Feedback e render
-        if (cardStatementItemDescriptionInput) cardStatementItemDescriptionInput.value = '';
-        if (cardStatementItemAmountInput) cardStatementItemAmountInput.value = '';
-        if (cardStatementItemAreaInput) cardStatementItemAreaInput.value = '';
-
-        renderCardStatementForSelected();
-        if (typeof renderAnalyticsForMonth === 'function' && analyticsMonthInput && analyticsMonthInput.value === monthYYYYMM) {
-            renderAnalyticsForMonth(monthYYYYMM);
-        }
-
-        showToast('Despesa deduzida adicionada com sucesso!');
-    });
-}
-
-// -------------------------
 // Análises (novo): área e gráfico de pizza por tipo
 // -------------------------
 const analyticsMonthInput = document.getElementById('analytics-month');
@@ -1596,87 +1142,69 @@ function renderAnalyticsForMonth(monthYYYYMM) {
     const typeTotals = new Map(); // key = label (Fixo Manual etc)
     const originTotals = new Map();
 
-    function addExpense(areaKey, tipoCode, origem, status, amountAbs) {
+    function addExpenseAreas(areaKey, origem, status, amountAbs) {
         const s = status ?? 'OK';
         if (s === 'Pendente') return;
         const a = areaKey ? String(areaKey) : 'Sem área';
-        const tipoLabel = getTipoLabel(tipoCode);
         const o = origem ? String(origem) : 'Outros';
         const amt = Math.abs(Number(amountAbs) || 0);
         if (!amt) return;
 
         areaTotals.set(a, (areaTotals.get(a) || 0) + amt);
-        typeTotals.set(tipoLabel, (typeTotals.get(tipoLabel) || 0) + amt);
         originTotals.set(o, (originTotals.get(o) || 0) + amt);
     }
 
-    // Recorrentes (previsto/esperado para o mês)
+    function addTypeTotal(tipoCode, amountAbs) {
+        const amt = Math.abs(Number(amountAbs) || 0);
+        if (!amt) return;
+        const tipoLabel = getTipoLabel(tipoCode);
+        typeTotals.set(tipoLabel, (typeTotals.get(tipoLabel) || 0) + amt);
+    }
+
+    // Recorrentes (previsto/esperado para o mês) + overrides de mês
     const activeCosts = recurringCosts.filter(c => isCostActiveForMonth(c, monthYYYYMM));
-    const overridesForMonth = variableCostOverrides.filter(o => o.month === monthYYYYMM);
-    const overridesMap = new Map(overridesForMonth.map(o => [o.costId, o.amount]));
-
     activeCosts.forEach(cost => {
-        const amountAbs =
-            isVariableTipoCode(cost.type)
-                ? (overridesMap.has(cost.id)
-                    ? Math.abs(overridesMap.get(cost.id))
-                    : Math.abs(cost.amount))
-                : Math.abs(cost.amount);
-
-        const status = isVariableTipoCode(cost.type) ? 'OK' : (cost.statusPadrao ?? 'OK');
-        addExpense(cost.area, cost.type, cost.origem, status, amountAbs);
-    });
-
-    // Compras avulsas no cartão (lançadas no mês)
-    const purchases = transactions.filter(t => {
-        const meta = t.meta || {};
-        return t.amount < 0 && meta.type === 'credit_card_purchase' && meta.month === monthYYYYMM;
-    });
-
-    purchases.forEach(tx => {
-        addExpense(tx.area, tx.meta?.tipo ?? 'temporario_manual', tx.meta?.origem ?? getOrigemLabel(tx.meta), tx.meta?.status ?? 'OK', tx.amount);
-    });
-
-    // Itens do fechamento do cartão (deduções) no mês
-    const statementsForMonth = (creditCardMonthlyStatements || []).filter(s => s && s.month === monthYYYYMM);
-    statementsForMonth.forEach(statement => {
-        const items = Array.isArray(statement.items) ? statement.items : [];
-        let usedTotal = 0;
-
-        items.forEach(it => {
-            const status = it.status ?? 'OK';
-            if (status === 'Pendente') return;
-            const amountAbs = Math.abs(Number(it.amount) || 0);
-            if (!amountAbs) return;
-            usedTotal += amountAbs;
-
-            addExpense(it.area, 'temporario_manual', it.origem ?? 'Cartão', status, amountAbs);
-        });
-
-        const closingTotal = statement && Number.isFinite(+statement.closingTotal) ? +statement.closingTotal : 0;
-        const remaining = closingTotal - usedTotal;
-        if (remaining > 0.000001) {
-            addExpense('Outros', 'temporario_manual', 'Cartão', 'OK', remaining);
+        let amountAbs;
+        if (cost.type === 'fixo') {
+            amountAbs = getFixedManualOverrideAmount(cost.id, monthYYYYMM);
+            if (amountAbs === null) amountAbs = Math.abs(cost.amount ?? 0);
+        } else {
+            // variável: por padrão é 0.00; se existir override no mês, usa
+            amountAbs = getVariableOverrideAmount(cost.id, monthYYYYMM) ?? 0;
         }
+
+        const status = cost.type === 'variavel' ? 'OK' : (cost.statusPadrao ?? 'OK');
+        if ((status ?? 'OK') === 'Pendente') return;
+
+        // Para áreas e origens, entram só despesas (recorrências)
+        addExpenseAreas(cost.area, cost.origem, status, amountAbs);
+        addTypeTotal(cost.type, amountAbs);
     });
 
-    // Lançamentos manuais (não contam recorrências/compra avulsa)
-    const manualExpenses = transactions.filter(t => {
+    // Lançamentos manuais
+    const manualTxs = (transactions || []).filter(t => {
         const meta = t.meta || {};
-        const txMonth = meta.month ? meta.month : getCurrentMonthYYYYMM();
-        const txType = meta.type;
-        const isManualLike = !txType || txType === 'manual_transaction';
-        return t.amount < 0 && isManualLike && meta.type !== 'recurring_cost' && meta.type !== 'credit_card_purchase' && txMonth === monthYYYYMM;
+        return meta.type === 'manual_transaction' && meta.month === monthYYYYMM;
     });
 
-    manualExpenses.forEach(tx => {
-        addExpense(
-            tx.area,
-            tx.meta?.tipo ?? tx.meta?.costType ?? 'temporario_manual',
-            tx.meta?.origem ?? getOrigemLabel(tx.meta),
-            tx.meta?.status ?? 'OK',
-            Math.abs(tx.amount)
-        );
+    manualTxs.forEach(tx => {
+        const meta = tx.meta || {};
+        // override fixo já foi contabilizado como recorrência (matriz)
+        if (meta.manualOverrideFor === 'fixo' && meta.recurringCostId) return;
+
+        const status = meta.status ?? 'OK';
+        if (status === 'Pendente') return;
+
+        const amountAbs = Math.abs(Number(tx.amount) || 0);
+        if (!amountAbs) return;
+
+        const cashType = meta.tipo === 'receita' || tx.amount > 0 ? 'receita' : 'despesa';
+        addTypeTotal(cashType, amountAbs);
+
+        // Áreas e origens: apenas despesas
+        if (cashType === 'despesa') {
+            addExpenseAreas(tx.area, meta.origem ?? getOrigemLabel(meta), status, amountAbs);
+        }
     });
 
     // Render lista por área
@@ -1734,10 +1262,10 @@ function renderAnalyticsForMonth(monthYYYYMM) {
     const data = typeArr.map(x => Number(x.total.toFixed(2)));
 
     const colorsByType = {
-        'Fixo Automático': '#4dabf7',
-        'Fixo Manual': '#20c997',
-        'Variável Manual': '#ffd43b',
-        'Temporário Manual': '#ff922b'
+        'Fixo': '#4dabf7',
+        'Variável': '#20c997',
+        'Despesa': '#ffd43b',
+        'Receita': '#51cf66'
     };
 
     const getColor = (label) => colorsByType[label] ?? '#6f42c1';
@@ -1770,7 +1298,7 @@ function renderAnalyticsForMonth(monthYYYYMM) {
 
     // Barras comparando os 4 tipos principais
     if (typeBarCanvas && typeof Chart !== 'undefined') {
-        const barCategories = ['Fixo Automático', 'Fixo Manual', 'Variável Manual', 'Temporário Manual'];
+        const barCategories = ['Fixo', 'Variável', 'Despesa', 'Receita'];
         const barData = barCategories.map(c => Number((typeTotals.get(c) || 0).toFixed(2)));
 
         if (typeBarChartInstance) typeBarChartInstance.destroy();
@@ -1819,5 +1347,4 @@ if (analyticsMonthInput) {
     renderAnalyticsForMonth(analyticsMonthInput.value);
 }
 
-// Ao adicionar/alterar cartão, atualiza select de lançamentos
-renderPurchaseCardSelectOptions();
+// (Cartões removidos) Sem inicialização extra no final do arquivo

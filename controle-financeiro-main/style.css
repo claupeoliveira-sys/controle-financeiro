@@ -326,16 +326,13 @@ h4 {
 
 .recurring-costs,
 .post-month-costs,
-.add-recurring-cost,
-.credit-cards,
-.add-credit-card {
+.add-recurring-cost {
     margin-top: 14px;
     padding-top: 8px;
     border-top: 1px solid var(--border-color);
 }
 
-#recurring-cost-list,
-#credit-cards-list {
+#recurring-cost-list {
     list-style-type: none;
     padding: 0;
 }
@@ -348,8 +345,7 @@ h4 {
     text-align: center;
 }
 
-.cost-item,
-.credit-card-item {
+.cost-item {
     background-color: var(--card-bg);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
     padding: 6px;
@@ -361,42 +357,19 @@ h4 {
     gap: 12px;
 }
 
-.cost-left,
-.credit-card-left {
+.cost-left {
     min-width: 0;
 }
 
-.cost-description,
-.credit-card-name {
+.cost-description {
     font-weight: bold;
     margin-bottom: 4px;
     word-break: break-word;
 }
 
-.cost-meta,
-.credit-card-meta {
+.cost-meta {
     color: var(--muted-text-color);
     font-size: 13px;
-}
-
-.cost-amount-display {
-    font-weight: bold;
-}
-
-.cost-amount-input-wrap input.variable-amount-input {
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 8px 10px;
-    font-size: 16px;
-    width: 130px;
-    background-color: rgba(255, 255, 255, 0.03);
-    color: var(--text-color);
-    outline: none;
-}
-
-.credit-card-right {
-    text-align: right;
-    font-weight: bold;
 }
 
 .cost-right {
@@ -416,15 +389,7 @@ h4 {
     display: flex;
 }
 
-.credit-card-actions {
-    display: none;
-    flex-direction: row;
-    gap: 6px;
-}
-
-.credit-card-item:hover .credit-card-actions {
-    display: flex;
-}
+/* cartões e faturas removidos: estilos específicos removidos */
 
 .icon-action-btn {
     cursor: pointer;
@@ -465,72 +430,18 @@ h4 {
     border-color: rgba(255, 92, 122, 0.7);
 }
 
-.invoice-section {
-    margin-top: 14px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border-color);
-}
+/* estilos de fatura/fechamento removidos */
 
-#invoice-list {
-    list-style-type: none;
-    padding: 0;
-    margin-top: 10px;
-}
-
-.invoice-item {
-    background-color: var(--card-bg);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
-    padding: 6px;
-    margin: 6px 0;
-    border-radius: 6px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-}
-
-#card-statement-item-list {
-    list-style-type: none;
-    padding: 0;
-    margin-top: 10px;
-}
-
-.statement-item {
-    background-color: var(--card-bg);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
-    padding: 6px;
-    margin: 6px 0;
-    border-radius: 6px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-}
-
-.statement-item .statement-left {
-    min-width: 0;
-}
-
-.statement-item .statement-desc {
-    font-weight: bold;
-    word-break: break-word;
-}
-
-.statement-item .statement-meta {
-    color: var(--muted-text-color);
-    font-size: 12px;
-    margin-top: 2px;
-}
-
-.invoice-name {
-    font-weight: bold;
-    word-break: break-word;
-}
-
-.invoice-total {
-    font-weight: bold;
-    text-align: right;
-    white-space: nowrap;
+/* input de valor nas recorrências */
+.cost-amount-input-wrap input.recurring-amount-input {
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 16px;
+    width: 130px;
+    background-color: rgba(255, 255, 255, 0.03);
+    color: var(--text-color);
+    outline: none;
 }
 
 .form-control {
@@ -689,16 +600,7 @@ h4 {
     pointer-events: auto;
 }
 
-#card-statement-item-list .remove-btn {
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
-}
-
-#card-statement-item-list li.statement-item:hover .remove-btn {
-    opacity: 1;
-    pointer-events: auto;
-}
+/* fechamento do cartão removido */
 
 @media (max-width: 600px) {
     .container {

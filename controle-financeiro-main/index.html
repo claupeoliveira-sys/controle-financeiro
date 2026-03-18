@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controle de Orçamento Pessoal</title>
+    <title>Controle de Orçamento</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -24,14 +24,13 @@
     </datalist>
 
     <div class="container">
-        <h1>Controle de Orçamento Pessoal</h1>
+        <h1>Controle de Orçamento</h1>
 
         <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
         <div class="nav-tabs">
             <button class="tab-btn active" type="button" data-target="view-transactions">Transações</button>
             <button class="tab-btn" type="button" data-target="view-costs">Custos por Mês</button>
-            <button class="tab-btn" type="button" data-target="view-credit-cards">Cartões de Crédito</button>
             <button class="tab-btn" type="button" data-target="view-analytics">Análises</button>
         </div>
 
@@ -77,12 +76,10 @@
 
                         <div class="form-row">
                             <div class="form-control">
-                                <label for="transaction-type">Tipo</label>
+                                <label for="transaction-type">Tipo de Lançamento</label>
                                 <select id="transaction-type" required>
-                                    <option value="temporario_manual">Temporário Manual</option>
-                                    <option value="variavel_manual">Variável Manual</option>
-                                    <option value="fixo_manual">Fixo Manual</option>
-                                    <option value="fixo_automatico">Fixo Automático</option>
+                                    <option value="despesa" selected>Despesa</option>
+                                    <option value="receita">Receita</option>
                                 </select>
                             </div>
                             <div class="form-control">
@@ -106,8 +103,8 @@
                         </div>
 
                         <div class="form-control">
-                            <label for="amount">Valor (R$) (negativo para despesas, positivo para receitas)</label>
-                            <input type="number" id="amount" placeholder="Ex: -50 (despesa) ou 100 (receita)" step="0.01" required>
+                            <label for="amount">Valor (R$)</label>
+                            <input type="number" id="amount" placeholder="Ex: 50" step="0.01" min="0" required>
                         </div>
                         <button class="btn" type="submit">Adicionar Transação</button>
                     </form>
@@ -165,25 +162,16 @@
                         </details>
 
                         <div class="form-control">
-                            <label for="cost-credit-card">Cartão de crédito (opcional)</label>
-                            <select id="cost-credit-card">
-                                <option value="">Sem cartão</option>
-                            </select>
-                        </div>
-
-                        <div class="form-control">
                             <label for="cost-type">Tipo</label>
                             <select id="cost-type" required>
-                                <option value="fixo_automatico">Fixo Automático</option>
-                                <option value="fixo_manual">Fixo Manual</option>
-                                <option value="variavel_manual">Variável Manual</option>
-                                <option value="temporario_manual">Temporário Manual</option>
+                                <option value="fixo">Fixo</option>
+                                <option value="variavel">Variável</option>
                             </select>
                         </div>
 
                         <div class="form-control">
-                            <label for="cost-amount">Valor (R$) (para Fixo; para Variável como valor inicial)</label>
-                            <input type="number" id="cost-amount" placeholder="Ex: 120.50" step="0.01" required>
+                            <label for="cost-amount">Valor (R$) (Fixo; Variável: 0 padrão)</label>
+                            <input type="number" id="cost-amount" placeholder="Ex: 120.50" step="0.01" min="0" required>
                         </div>
 
                         <div class="form-row">
@@ -226,208 +214,6 @@
                         </button>
                     </form>
                 </div>
-            </div>
-        </div>
-
-        <!-- Tela: Cartões de Crédito -->
-        <div id="view-credit-cards" class="view">
-            <h3>Cartões de Crédito</h3>
-
-            <div class="credit-cards">
-                <h4>Seus cartões</h4>
-                <ul id="credit-cards-list">
-                    <!-- Itens serão renderizados via JavaScript -->
-                </ul>
-            </div>
-
-            <div class="invoice-section">
-                <h4>Fatura por Cartão (custos do mês)</h4>
-                <div class="form-row">
-                    <div class="form-control">
-                        <label for="invoice-month">Mês</label>
-                        <input type="month" id="invoice-month" required>
-                    </div>
-                </div>
-
-                <div class="monthly-total">
-                    Total dos custos no mês: <span id="invoice-monthly-total">R$ 0.00</span>
-                </div>
-
-                <ul id="invoice-list">
-                    <!-- Itens serão renderizados via JavaScript -->
-                </ul>
-            </div>
-
-            <div class="invoice-section">
-                <h4>Lançar compra no cartão (por mês)</h4>
-                <button class="btn secondary collapsible-toggle" id="purchase-toggle-btn" type="button">
-                    <span class="btn-icon" aria-hidden="true">+</span> Lançar compra no cartão
-                </button>
-                <div id="purchase-form-collapsible" class="collapsible-fields collapsed">
-                    <form id="credit-card-purchase-form">
-                        <div class="form-row">
-                            <div class="form-control">
-                                <label for="purchase-month">Mês</label>
-                                <input type="month" id="purchase-month" required>
-                            </div>
-                            <div class="form-control">
-                                <label for="purchase-card-select">Cartão</label>
-                                <select id="purchase-card-select" required>
-                                    <option value="">Selecione</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-control">
-                                <label for="purchase-origin">Origem</label>
-                                <select id="purchase-origin" required>
-                                    <option value="Cartão" selected>Cartão</option>
-                                    <option value="Boleto">Boleto</option>
-                                    <option value="PIX">PIX</option>
-                                    <option value="Outros">Outros</option>
-                                </select>
-                            </div>
-                            <div class="form-control">
-                                <label for="purchase-status">Status</label>
-                                <select id="purchase-status" required>
-                                    <option value="OK" selected>OK</option>
-                                    <option value="Pendente">Pendente</option>
-                                    <option value="AUTO">AUTO</option>
-                                    <option value="ANUAL">ANUAL</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-control">
-                            <label for="purchase-description">Descrição</label>
-                            <input type="text" id="purchase-description" placeholder="Ex: Mercado, Remédio, Hotel" required>
-                        </div>
-
-                        <div class="form-control">
-                            <label for="purchase-amount">Valor da compra (R$)</label>
-                            <input type="number" id="purchase-amount" placeholder="Ex: 89.90" step="0.01" required>
-                        </div>
-
-                        <details class="optional-details" open="false">
-                            <summary>+ Área (opcional)</summary>
-                            <div class="form-control">
-                                <label for="purchase-area">Área</label>
-                                <input type="text" id="purchase-area" list="areas-list" placeholder="Ex: Alimentação, Saúde, Viagem">
-                            </div>
-                        </details>
-
-                        <button class="btn secondary" type="submit">Lançar no cartão</button>
-                    </form>
-                </div>
-            </div>
-
-            <div class="invoice-section">
-                <h4>Fechamento do Cartão por Mês (deduções)</h4>
-
-                <div class="form-row">
-                    <div class="form-control">
-                        <label for="card-statement-month">Mês</label>
-                        <input type="month" id="card-statement-month" required>
-                    </div>
-                    <div class="form-control">
-                        <label for="card-statement-select">Cartão</label>
-                        <select id="card-statement-select" required>
-                            <option value="">Selecione</option>
-                        </select>
-                    </div>
-                </div>
-
-                        <div class="form-control">
-                            <label for="card-statement-closing-total">Valor de fechamento (total do mês, R$)</label>
-                    <input type="number" id="card-statement-closing-total" placeholder="Ex: 1000" step="0.01" required>
-                </div>
-
-                <div class="monthly-total">
-                    Despesas lançadas: <span id="card-statement-used-total">R$ 0.00</span> |
-                    Demais despesas (restante): <span id="card-statement-remaining-total">R$ 0.00</span>
-                </div>
-
-                <button class="btn secondary" id="card-statement-save-btn" type="button">
-                    Salvar fechamento
-                </button>
-
-                <div class="add-recurring-cost" style="border-top: 0; padding-top: 0;">
-                    <h4>Adicionar despesa ao fechamento</h4>
-                    <button class="btn secondary collapsible-toggle" id="card-statement-item-toggle-btn" type="button">
-                        <span class="btn-icon" aria-hidden="true">+</span> Detalhes
-                    </button>
-                    <div id="card-statement-item-form-collapsible" class="collapsible-fields collapsed">
-                    <form id="card-statement-item-form">
-                        <div class="form-control">
-                            <label for="card-statement-item-description">Descrição</label>
-                            <input type="text" id="card-statement-item-description" placeholder="Ex: Compra de tênis" required>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-control">
-                                <label for="card-statement-item-amount">Valor (R$)</label>
-                                <input type="number" id="card-statement-item-amount" placeholder="Ex: 500" step="0.01" required>
-                            </div>
-                        </div>
-
-                        <details class="optional-details" open="false">
-                            <summary>+ Área (opcional)</summary>
-                            <div class="form-control">
-                                <label for="card-statement-item-area">Área</label>
-                                <input type="text" id="card-statement-item-area" list="areas-list" placeholder="Ex: Vestuário, Saúde, Alimentação">
-                            </div>
-                        </details>
-
-                        <div class="form-row">
-                            <div class="form-control">
-                                <label for="card-statement-item-origin">Origem</label>
-                                <select id="card-statement-item-origin" required>
-                                    <option value="Cartão" selected>Cartão</option>
-                                    <option value="Boleto">Boleto</option>
-                                    <option value="PIX">PIX</option>
-                                    <option value="Outros">Outros</option>
-                                </select>
-                            </div>
-                            <div class="form-control">
-                                <label for="card-statement-item-status">Status</label>
-                                <select id="card-statement-item-status" required>
-                                    <option value="OK" selected>OK</option>
-                                    <option value="Pendente">Pendente</option>
-                                    <option value="AUTO">AUTO</option>
-                                    <option value="ANUAL">ANUAL</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <button class="btn secondary" type="submit">Deduzir valor</button>
-                    </form>
-                    </div>
-                </div>
-
-                <div class="recurring-costs">
-                    <h4>Itens deduzidos</h4>
-                    <ul id="card-statement-item-list">
-                        <!-- Renderizado via JS -->
-                    </ul>
-                </div>
-            </div>
-
-            <div class="add-credit-card">
-                <h4>Adicionar / Atualizar cartão</h4>
-                <form id="credit-card-form">
-                    <div class="form-control">
-                        <label for="credit-card-name">Nome do cartão</label>
-                        <input type="text" id="credit-card-name" placeholder="Ex: Nubank" required>
-                    </div>
-
-                    <div class="form-control">
-                        <label for="credit-card-annual-total">Valor total (digitado anualmente)</label>
-                        <input type="number" id="credit-card-annual-total" placeholder="Ex: 2400" step="0.01" required>
-                    </div>
-
-                    <button class="btn" type="submit">Salvar cartão</button>
-                </form>
             </div>
         </div>
 
