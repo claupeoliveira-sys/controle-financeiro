@@ -106,7 +106,7 @@
                         </div>
 
                         <div class="form-control">
-                            <label for="amount">Valor (negativo para despesas, positivo para receitas)</label>
+                            <label for="amount">Valor (R$) (negativo para despesas, positivo para receitas)</label>
                             <input type="number" id="amount" placeholder="Ex: -50 (despesa) ou 100 (receita)" step="0.01" required>
                         </div>
                         <button class="btn" type="submit">Adicionar Transação</button>
@@ -182,7 +182,7 @@
                         </div>
 
                         <div class="form-control">
-                            <label for="cost-amount">Valor (para Fixo; para Variável como valor inicial)</label>
+                            <label for="cost-amount">Valor (R$) (para Fixo; para Variável como valor inicial)</label>
                             <input type="number" id="cost-amount" placeholder="Ex: 120.50" step="0.01" required>
                         </div>
 
@@ -220,7 +220,10 @@
                             </details>
                         </div>
 
-                        <button class="btn" type="submit">Adicionar recorrência</button>
+                        <button class="btn" type="submit" id="cost-recurring-submit-btn">Adicionar recorrência</button>
+                        <button class="btn secondary" type="button" id="cost-recurring-cancel-btn" style="display:none;">
+                            Cancelar
+                        </button>
                     </form>
                 </div>
             </div>
@@ -302,7 +305,7 @@
                         </div>
 
                         <div class="form-control">
-                            <label for="purchase-amount">Valor da compra</label>
+                            <label for="purchase-amount">Valor da compra (R$)</label>
                             <input type="number" id="purchase-amount" placeholder="Ex: 89.90" step="0.01" required>
                         </div>
 
@@ -335,8 +338,8 @@
                     </div>
                 </div>
 
-                <div class="form-control">
-                    <label for="card-statement-closing-total">Valor de fechamento (total do mês)</label>
+                        <div class="form-control">
+                            <label for="card-statement-closing-total">Valor de fechamento (total do mês, R$)</label>
                     <input type="number" id="card-statement-closing-total" placeholder="Ex: 1000" step="0.01" required>
                 </div>
 
@@ -363,7 +366,7 @@
 
                         <div class="form-row">
                             <div class="form-control">
-                                <label for="card-statement-item-amount">Valor</label>
+                                <label for="card-statement-item-amount">Valor (R$)</label>
                                 <input type="number" id="card-statement-item-amount" placeholder="Ex: 500" step="0.01" required>
                             </div>
                         </div>

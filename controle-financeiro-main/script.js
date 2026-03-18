@@ -60,6 +60,11 @@ function showToast(message) {
     }, 2500);
 }
 
+function setInvalid(inputEl, invalid) {
+    if (!inputEl) return;
+    inputEl.classList.toggle('input-invalid', !!invalid);
+}
+
 function setupCollapsible(toggleId, targetId) {
     const toggleBtn = document.getElementById(toggleId);
     const target = document.getElementById(targetId);
@@ -166,7 +171,7 @@ function addTransactionDOM(transaction) {
             ].filter(Boolean).join(' | ')}</div>
         </div>
         <span>${sign} R$ ${Math.abs(transaction.amount).toFixed(2)}</span>
-        <button class="edit-btn" type="button" onclick="startEditTransaction(${transaction.id})">
+        <button class="edit-btn" type="button" onclick="startEditTransaction(${transaction.id})" aria-label="Editar transação">
             <span class="action-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 20h9"></path>
@@ -253,8 +258,11 @@ function cancelEditTransaction() {
 function addTransaction(e) {
     e.preventDefault();
 
+    setInvalid(amountInput, false);
     if (descriptionInput.value.trim() === '' || amountInput.value.trim() === '') {
-        alert('Por favor, adicione uma descrição e um valor.');
+        setInvalid(amountInput, true);
+        showToast('Preencha descrição e valor.');
+        descriptionInput.focus();
         return;
     }
 
@@ -265,6 +273,13 @@ function addTransaction(e) {
     const status = transactionStatusInput ? transactionStatusInput.value : 'OK';
     const newAmount = +amountInput.value; // O '+' converte para número
     const description = descriptionInput.value.trim();
+
+    if (!Number.isFinite(newAmount)) {
+        setInvalid(amountInput, true);
+        showToast('Valor inválido. Informe um número.');
+        amountInput.focus();
+        return;
+    }
 
     if (editingTransactionId !== null) {
         const idx = transactions.findIndex(t => t.id === editingTransactionId);
@@ -375,6 +390,7 @@ function addTransaction(e) {
     }
 
     showToast('Transação adicionada com sucesso!');
+    setInvalid(amountInput, false);
     descriptionInput.value = '';
     amountInput.value = '';
     transactionAreaInput.value = '';
@@ -433,6 +449,8 @@ const costStatusPadraoSelect = document.getElementById('cost-status-padrao');
 const costAmountInput = document.getElementById('cost-amount');
 const costStartMonthInput = document.getElementById('cost-start-month');
 const costEndMonthInput = document.getElementById('cost-end-month');
+const costRecurringSubmitBtn = document.getElementById('cost-recurring-submit-btn');
+const costRecurringCancelBtn = document.getElementById('cost-recurring-cancel-btn');
 
 function getCurrentMonthYYYYMM() {
     const now = new Date();
@@ -516,6 +534,112 @@ function upsertCostTransaction(cost, monthYYYYMM, amountAbs) {
     saveTransactionsToLocalStorage(transactions);
 }
 
+// -------------------------
+// Recorrências: editar/remover
+// -------------------------
+let editingRecurringCostId = null;
+
+function expandCostRecurringForm() {
+    const collapsible = document.getElementById('cost-recurring-form-collapsible');
+    if (!collapsible) return;
+    collapsible.classList.add('expanded');
+}
+
+function resetCostRecurringFormMode() {
+    editingRecurringCostId = null;
+    if (costRecurringSubmitBtn) costRecurringSubmitBtn.textContent = 'Adicionar recorrência';
+    if (costRecurringCancelBtn) costRecurringCancelBtn.style.display = 'none';
+}
+
+function startEditRecurringCost(costId) {
+    const cost = recurringCosts.find(c => c.id === costId);
+    if (!cost) return;
+
+    editingRecurringCostId = costId;
+    if (costRecurringSubmitBtn) costRecurringSubmitBtn.textContent = 'Salvar alterações';
+    if (costRecurringCancelBtn) costRecurringCancelBtn.style.display = 'block';
+
+    if (costDescriptionInput) costDescriptionInput.value = cost.description ?? '';
+    if (costAreaInput) costAreaInput.value = cost.area ?? '';
+    if (costTypeSelect) costTypeSelect.value = cost.type ?? 'temporario_manual';
+    if (costAmountInput) costAmountInput.value = Math.abs(cost.amount ?? 0);
+    if (costCreditCardSelect) costCreditCardSelect.value = cost.creditCardId ? String(cost.creditCardId) : '';
+    if (costOriginSelect) costOriginSelect.value = cost.origem ?? 'Outros';
+    if (costStatusPadraoSelect) costStatusPadraoSelect.value = cost.statusPadrao ?? 'OK';
+    if (costStartMonthInput) costStartMonthInput.value = cost.startMonth ?? getCurrentMonthYYYYMM();
+    if (costEndMonthInput) costEndMonthInput.value = cost.endMonth ?? '';
+
+    expandCostRecurringForm();
+    showToast('Editando recorrência...');
+    if (costDescriptionInput) costDescriptionInput.focus();
+}
+
+function syncExistingTransactionsForRecurringCost(cost) {
+    if (!cost) return;
+
+    // remove meses que não ficam mais ativos
+    transactions = transactions.filter(tx => {
+        const m = tx.meta;
+        if (!m || m.type !== 'recurring_cost' || m.recurringCostId !== cost.id) return true;
+        return isCostActiveForMonth(cost, m.month);
+    });
+
+    const existingMonths = new Set(
+        (transactions || [])
+            .filter(tx => tx.meta && tx.meta.type === 'recurring_cost' && tx.meta.recurringCostId === cost.id && tx.meta.month)
+            .map(tx => tx.meta.month)
+    );
+
+    existingMonths.forEach(month => {
+        const amountAbs = isVariableTipoCode(cost.type)
+            ? (getVariableOverrideAmount(cost.id, month) ?? Math.abs(cost.amount))
+            : Math.abs(cost.amount);
+        upsertCostTransaction(cost, month, amountAbs);
+    });
+}
+
+function removeRecurringCost(costId) {
+    const cost = recurringCosts.find(c => c.id === costId);
+    if (!cost) return;
+
+    const confirmed = confirm(`Remover a recorrência "${cost.description}"?`);
+    if (!confirmed) return;
+
+    recurringCosts = recurringCosts.filter(c => c.id !== costId);
+    variableCostOverrides = variableCostOverrides.filter(o => o.costId !== costId);
+    transactions = transactions.filter(tx => {
+        const m = tx.meta;
+        return !(m && m.type === 'recurring_cost' && m.recurringCostId === costId);
+    });
+
+    setJSONToLocalStorage(STORAGE_KEYS.recurringCosts, recurringCosts);
+    setJSONToLocalStorage(STORAGE_KEYS.variableCostOverrides, variableCostOverrides);
+    saveTransactionsToLocalStorage(transactions);
+
+    if (editingRecurringCostId === costId) resetCostRecurringFormMode();
+
+    if (costMonthInput && costMonthInput.value) {
+        renderRecurringCostsForMonth(costMonthInput.value);
+    }
+    if (invoiceMonthInput && invoiceMonthInput.value) {
+        renderInvoicesForMonth(invoiceMonthInput.value);
+    }
+    if (typeof renderAnalyticsForMonth === 'function' && analyticsMonthInput && analyticsMonthInput.value) {
+        renderAnalyticsForMonth(analyticsMonthInput.value);
+    }
+    init();
+    showToast('Recorrência removida com sucesso!');
+}
+
+if (costRecurringCancelBtn) {
+    costRecurringCancelBtn.addEventListener('click', () => {
+        resetCostRecurringFormMode();
+        const collapsible = document.getElementById('cost-recurring-form-collapsible');
+        if (collapsible) collapsible.classList.remove('expanded');
+        showToast('Edição cancelada.');
+    });
+}
+
 function renderCostCreditCardSelectOptions() {
     if (!costCreditCardSelect) return;
 
@@ -589,21 +713,43 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
                 <div class="cost-meta">Tipo: ${getTipoLabel(cost.type)} | Origem: ${origemName} | Status: ${statusName} | Cartão: ${cardName} | Área: ${areaName}</div>
             </div>
             <div class="cost-right">
-                ${
-                    isVariableTipoCode(cost.type)
-                        ? `
-                            <div class="cost-amount-input-wrap">
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    class="variable-amount-input"
-                                    data-cost-id="${cost.id}"
-                                    value="${amount.toFixed(2)}"
-                                />
-                            </div>
-                          `
-                        : `<div class="cost-amount-display">R$ ${amount.toFixed(2)}</div>`
-                }
+                <div class="cost-value">
+                    ${
+                        isVariableTipoCode(cost.type)
+                            ? `
+                                <div class="cost-amount-input-wrap">
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        class="variable-amount-input"
+                                        data-cost-id="${cost.id}"
+                                        value="${amount.toFixed(2)}"
+                                    />
+                                </div>
+                              `
+                            : `<div class="cost-amount-display">R$ ${amount.toFixed(2)}</div>`
+                    }
+                </div>
+
+                <div class="cost-actions" aria-hidden="true">
+                    <button class="icon-action-btn" type="button" onclick="startEditRecurringCost(${cost.id})" aria-label="Editar recorrência">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 20h9"></path>
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                        </svg>
+                        Editar
+                    </button>
+                    <button class="icon-action-btn recurring-remove-btn" type="button" onclick="removeRecurringCost(${cost.id})" aria-label="Remover recorrência">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3 6h18"></path>
+                            <path d="M8 6V4h8v2"></path>
+                            <path d="M19 6l-1 14H6L5 6"></path>
+                            <path d="M10 11v6"></path>
+                            <path d="M14 11v6"></path>
+                        </svg>
+                        Remover
+                    </button>
+                </div>
             </div>
         `;
 
@@ -695,29 +841,58 @@ if (costRecurringForm) {
         }
 
         if (!description || !type || !origem || !startMonth || !Number.isFinite(amount)) {
+            setInvalid(costAmountInput, true);
             alert('Preencha descrição, tipo, valor, origem e mês de início.');
             return;
         }
+        setInvalid(costAmountInput, false);
 
         const creditCardIdRaw = costCreditCardSelect ? costCreditCardSelect.value : '';
         const creditCardId = creditCardIdRaw ? +creditCardIdRaw : null;
         const area = costAreaInput ? costAreaInput.value.trim() : '';
 
-        const recurringCost = {
-            id: generateID(),
-            description,
-            type,
-            amount: Math.abs(amount),
-            area,
-            startMonth,
-            endMonth,
-            creditCardId,
-            origem,
-            statusPadrao
-        };
+        const isEditing = editingRecurringCostId !== null;
+        const target = isEditing ? recurringCosts.find(c => c.id === editingRecurringCostId) : null;
 
-        recurringCosts.push(recurringCost);
-        setJSONToLocalStorage(STORAGE_KEYS.recurringCosts, recurringCosts);
+        if (isEditing && target) {
+            const wasVariable = isVariableTipoCode(target.type);
+            const willBeVariable = isVariableTipoCode(type);
+
+            target.description = description;
+            target.type = type;
+            target.amount = Math.abs(amount);
+            target.area = area;
+            target.startMonth = startMonth;
+            target.endMonth = endMonth;
+            target.creditCardId = creditCardId;
+            target.origem = origem;
+            target.statusPadrao = statusPadrao;
+
+            if (wasVariable && !willBeVariable) {
+                variableCostOverrides = variableCostOverrides.filter(o => o.costId !== target.id);
+                setJSONToLocalStorage(STORAGE_KEYS.variableCostOverrides, variableCostOverrides);
+            }
+
+            setJSONToLocalStorage(STORAGE_KEYS.recurringCosts, recurringCosts);
+            syncExistingTransactionsForRecurringCost(target);
+            init();
+        } else {
+            const recurringCost = {
+                id: generateID(),
+                description,
+                type,
+                amount: Math.abs(amount),
+                area,
+                startMonth,
+                endMonth,
+                creditCardId,
+                origem,
+                statusPadrao
+            };
+
+            recurringCosts.push(recurringCost);
+            setJSONToLocalStorage(STORAGE_KEYS.recurringCosts, recurringCosts);
+        }
 
         // Re-renderiza a lista do mês atual
         if (costMonthInput) {
@@ -728,12 +903,19 @@ if (costRecurringForm) {
             renderInvoicesForMonth(invoiceMonthInput.value);
         }
 
-        costDescriptionInput.value = '';
+        if (!isEditing) costDescriptionInput.value = '';
         if (costAreaInput) costAreaInput.value = '';
         // Mantem tipo e valor para facilitar múltiplos lançamentos com mesma configuração
         costAmountInput.value = '';
         if (postMonthCostsHint) postMonthCostsHint.textContent = '';
-        showToast('Recorrência adicionada com sucesso!');
+        if (isEditing) {
+            resetCostRecurringFormMode();
+            const collapsible = document.getElementById('cost-recurring-form-collapsible');
+            if (collapsible) collapsible.classList.remove('expanded');
+            showToast('Recorrência atualizada com sucesso!');
+        } else {
+            showToast('Recorrência adicionada com sucesso!');
+        }
     });
 }
 
@@ -985,9 +1167,11 @@ if (purchaseForm) {
         const status = purchaseStatusSelect ? purchaseStatusSelect.value : 'OK';
 
         if (!monthYYYYMM || !cardId || !description || !Number.isFinite(amount) || !origem || !status) {
+            setInvalid(purchaseAmountInput, true);
             alert('Preencha mês, cartão, descrição e valor.');
             return;
         }
+        setInvalid(purchaseAmountInput, false);
 
         const tx = {
             id: generateID(),
@@ -1263,9 +1447,11 @@ if (cardStatementItemForm) {
         const status = cardStatementItemStatusSelect ? cardStatementItemStatusSelect.value : 'OK';
 
         if (!description || !Number.isFinite(amount) || !origem || !status) {
+            setInvalid(cardStatementItemAmountInput, true);
             alert('Preencha descrição, valor, origem e status.');
             return;
         }
+        setInvalid(cardStatementItemAmountInput, false);
 
         const statement = upsertCardStatement(creditCardId, monthYYYYMM);
         if (!statement) return;

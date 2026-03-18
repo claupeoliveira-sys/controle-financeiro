@@ -363,11 +363,62 @@ h2, h3 {
     padding: 8px 10px;
     font-size: 16px;
     width: 130px;
+    background-color: rgba(255, 255, 255, 0.03);
+    color: var(--text-color);
+    outline: none;
 }
 
 .credit-card-right {
     text-align: right;
     font-weight: bold;
+}
+
+.cost-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.cost-actions {
+    display: none;
+    flex-direction: row;
+    gap: 8px;
+}
+
+.cost-item:hover .cost-actions {
+    display: flex;
+}
+
+.icon-action-btn {
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text-color);
+    border-radius: 8px;
+    padding: 6px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.icon-action-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(230, 237, 243, 0.3);
+}
+
+.icon-action-btn svg {
+    display: block;
+}
+
+.recurring-remove-btn {
+    border-color: rgba(255, 92, 122, 0.35);
+    color: var(--text-color);
+}
+
+.recurring-remove-btn:hover {
+    border-color: rgba(255, 92, 122, 0.7);
 }
 
 .invoice-section {
@@ -455,8 +506,29 @@ h2, h3 {
     border-radius: 4px;
     display: block;
     font-size: 16px;
-    padding: 10px;
+    padding: 10px 12px;
     width: 100%;
+    background-color: rgba(255, 255, 255, 0.03);
+    color: var(--text-color);
+    outline: none;
+}
+
+.form-control input[type="text"]::placeholder,
+.form-control input[type="number"]::placeholder {
+    color: rgba(230, 237, 243, 0.55);
+}
+
+.form-control input[type="text"]:focus,
+.form-control input[type="number"]:focus,
+.form-control input[type="month"]:focus,
+.form-control select:focus {
+    border-color: rgba(230, 237, 243, 0.35);
+    box-shadow: 0 0 0 3px rgba(230, 237, 243, 0.10);
+}
+
+.input-invalid {
+    border-color: rgba(255, 92, 122, 0.9) !important;
+    box-shadow: 0 0 0 3px rgba(255, 92, 122, 0.18) !important;
 }
 
 .btn {
