@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Orçamento Pessoal</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Controle de Orçamento Pessoal</h1>
+
+        <div class="nav-tabs">
+            <button class="tab-btn active" type="button" data-target="view-transactions">Transações</button>
+            <button class="tab-btn" type="button" data-target="view-costs">Custos por Mês</button>
+            <button class="tab-btn" type="button" data-target="view-credit-cards">Cartões de Crédito</button>
+        </div>
+
+        <!-- Tela: Transações (existente) -->
+        <div id="view-transactions" class="view active-view">
+            <div class="balance-display">
+                <h2>Saldo Atual: <span id="balance">R$ 0.00</span></h2>
+            </div>
+
+            <div class="transactions">
+                <h3>Histórico de Transações</h3>
+                <ul id="transaction-list">
+                    <!-- Transações serão adicionadas aqui pelo JavaScript -->
+                </ul>
+            </div>
+
+            <div class="add-transaction">
+                <h3>Adicionar Nova Transação</h3>
+                <form id="transaction-form">
+                    <div class="form-control">
+                        <label for="description">Descrição</label>
+                        <input type="text" id="description" placeholder="Ex: Salário, Aluguel" required>
+                    </div>
+                    <div class="form-control">
+                        <label for="amount">Valor (negativo para despesas, positivo para receitas)</label>
+                        <input type="number" id="amount" placeholder="Ex: -50 (despesa) ou 100 (receita)" step="0.01" required>
+                    </div>
+                    <button class="btn" type="submit">Adicionar Transação</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Tela: Custos por Mês -->
+        <div id="view-costs" class="view">
+            <h3>Gestão de Custos por Mês</h3>
+
+            <div class="form-row">
+                <div class="form-control">
+                    <label for="cost-month">Mês</label>
+                    <input type="month" id="cost-month" required>
+                </div>
+            </div>
+
+            <div class="monthly-total">
+                Total do mês: <span id="monthly-total">R$ 0.00</span>
+            </div>
+
+            <div class="recurring-costs">
+                <h4>Contas recorrentes para o mês selecionado</h4>
+                <ul id="recurring-cost-list">
+                    <!-- Itens serão renderizados via JavaScript -->
+                </ul>
+            </div>
+
+            <div class="post-month-costs">
+                <button class="btn secondary" id="post-month-costs-btn" type="button">
+                    Lançar este mês no histórico
+                </button>
+                <p class="hint" id="post-month-costs-hint"></p>
+            </div>
+
+            <div class="add-recurring-cost">
+                <h4>Adicionar conta recorrente</h4>
+                <form id="cost-recurring-form">
+                    <div class="form-control">
+                        <label for="cost-description">Descrição</label>
+                        <input type="text" id="cost-description" placeholder="Ex: Aluguel, Internet" required>
+                    </div>
+
+                    <div class="form-control">
+                        <label for="cost-type">Tipo</label>
+                        <select id="cost-type" required>
+                            <option value="fixo">Fixo</option>
+                            <option value="variavel">Variável</option>
+                        </select>
+                    </div>
+
+                    <div class="form-control">
+                        <label for="cost-amount">Valor (para Fixo; para Variável como valor inicial)</label>
+                        <input type="number" id="cost-amount" placeholder="Ex: 120.50" step="0.01" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-control">
+                            <label for="cost-start-month">Início (mês)</label>
+                            <input type="month" id="cost-start-month" required>
+                        </div>
+                        <div class="form-control">
+                            <label for="cost-end-month">Fim (opcional)</label>
+                            <input type="month" id="cost-end-month">
+                        </div>
+                    </div>
+
+                    <button class="btn" type="submit">Adicionar recorrência</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Tela: Cartões de Crédito -->
+        <div id="view-credit-cards" class="view">
+            <h3>Cartões de Crédito</h3>
+
+            <div class="credit-cards">
+                <h4>Seus cartões</h4>
+                <ul id="credit-cards-list">
+                    <!-- Itens serão renderizados via JavaScript -->
+                </ul>
+            </div>
+
+            <div class="add-credit-card">
+                <h4>Adicionar / Atualizar cartão</h4>
+                <form id="credit-card-form">
+                    <div class="form-control">
+                        <label for="credit-card-name">Nome do cartão</label>
+                        <input type="text" id="credit-card-name" placeholder="Ex: Nubank" required>
+                    </div>
+
+                    <div class="form-control">
+                        <label for="credit-card-annual-total">Valor total (digitado anualmente)</label>
+                        <input type="number" id="credit-card-annual-total" placeholder="Ex: 2400" step="0.01" required>
+                    </div>
+
+                    <button class="btn" type="submit">Salvar cartão</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
