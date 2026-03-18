@@ -4,6 +4,9 @@ const form = document.getElementById('transaction-form');
 const descriptionInput = document.getElementById('description');
 const transactionMonthInput = document.getElementById('transaction-month');
 const transactionAreaInput = document.getElementById('transaction-area');
+const transactionTypeInput = document.getElementById('transaction-type');
+const transactionOriginInput = document.getElementById('transaction-origin');
+const transactionStatusInput = document.getElementById('transaction-status');
 const amountInput = document.getElementById('amount');
 const transactionFormSubmitBtn = form ? form.querySelector('button[type="submit"]') : null;
 
@@ -71,6 +74,37 @@ tabButtons.forEach(btn => {
 // -------------------------
 // Transações (existente)
 // -------------------------
+function getTipoLabel(tipoCode) {
+    const code = (tipoCode ?? '').toString();
+    if (code === 'fixo_automatico') return 'Fixo Automático';
+    if (code === 'fixo_manual') return 'Fixo Manual';
+    if (code === 'variavel_manual') return 'Variável Manual';
+    if (code === 'temporario_manual') return 'Temporário Manual';
+
+    // Compatibilidade com versões antigas
+    if (code === 'fixo') return 'Fixo Manual';
+    if (code === 'variavel') return 'Variável Manual';
+
+    return 'Temporário Manual';
+}
+
+function isVariableTipoCode(tipoCode) {
+    const code = (tipoCode ?? '').toString();
+    return code === 'variavel_manual' || code === 'variavel';
+}
+
+function getOrigemLabel(meta) {
+    if (!meta) return 'Outros';
+    if (meta.origem) return meta.origem;
+    if (meta.creditCardId) return 'Cartão';
+    return 'Outros';
+}
+
+function getStatusLabel(meta) {
+    if (!meta || !meta.status) return 'OK';
+    return meta.status;
+}
+
 // Função para adicionar uma transação ao DOM
 function addTransactionDOM(transaction) {
     const sign = transaction.amount < 0 ? '-' : '+';
@@ -80,11 +114,21 @@ function addTransactionDOM(transaction) {
 
     const area = transaction.area ? String(transaction.area) : '';
     const monthLabel = transaction.meta && transaction.meta.month ? transaction.meta.month : '';
+    const meta = transaction.meta || {};
+    const tipoLabel = getTipoLabel(meta.tipo ?? meta.costType ?? meta.manualType);
+    const origemLabel = getOrigemLabel(meta);
+    const statusLabel = getStatusLabel(meta);
 
     item.innerHTML = `
         <div>
             <div class="tx-desc">${transaction.description}</div>
-            <div class="tx-meta">${[monthLabel ? `Mês: ${monthLabel}` : '', area ? `Área: ${area}` : ''].filter(Boolean).join(' | ')}</div>
+            <div class="tx-meta">${[
+                monthLabel ? `Mês: ${monthLabel}` : '',
+                area ? `Área: ${area}` : '',
+                `Tipo: ${tipoLabel}`,
+                `Origem: ${origemLabel}`,
+                `Status: ${statusLabel}`
+            ].filter(Boolean).join(' | ')}</div>
         </div>
         <span>${sign} R$ ${Math.abs(transaction.amount).toFixed(2)}</span>
         <button class="edit-btn" type="button" onclick="startEditTransaction(${transaction.id})">Editar</button>
@@ -120,12 +164,19 @@ function startEditTransaction(id) {
     if (t.meta && t.meta.type === 'recurring_cost' && t.meta.recurringCostId) {
         const cost = recurringCosts.find(c => c.id === t.meta.recurringCostId);
         descriptionInput.value = cost ? (cost.description ?? '') : (t.description ?? '');
+        transactionTypeInput.value = (cost && cost.type) ? cost.type : (t.meta?.tipo ?? 'temporario_manual');
+        transactionOriginInput.value = (cost && cost.origem) ? cost.origem : (t.meta?.origem ?? getOrigemLabel(t.meta));
+        transactionStatusInput.value = (cost && cost.statusPadrao) ? cost.statusPadrao : (t.meta?.status ?? 'OK');
+        transactionAreaInput.value = (t.area ?? (cost ? cost.area : '')) || '';
     } else {
         descriptionInput.value = t.description ?? '';
+        transactionTypeInput.value = t.meta?.tipo ?? t.meta?.costType ?? 'temporario_manual';
+        transactionOriginInput.value = t.meta?.origem ?? getOrigemLabel(t.meta);
+        transactionStatusInput.value = t.meta?.status ?? 'OK';
+        transactionAreaInput.value = t.area ?? '';
     }
     amountInput.value = t.amount ?? 0;
     transactionMonthInput.value = t.meta && t.meta.month ? t.meta.month : (transactionMonthInput.value || getCurrentMonthYYYYMM());
-    transactionAreaInput.value = t.area ?? '';
 
     if (transactionFormSubmitBtn) {
         transactionFormSubmitBtn.textContent = 'Salvar Alteração';
@@ -138,6 +189,9 @@ function cancelEditTransaction() {
     amountInput.value = '';
     transactionAreaInput.value = '';
     transactionMonthInput.value = getCurrentMonthYYYYMM();
+    if (transactionTypeInput) transactionTypeInput.value = 'temporario_manual';
+    if (transactionOriginInput) transactionOriginInput.value = 'Outros';
+    if (transactionStatusInput) transactionStatusInput.value = 'OK';
 
     if (transactionFormSubmitBtn) {
         transactionFormSubmitBtn.textContent = 'Adicionar Transação';
@@ -155,6 +209,9 @@ function addTransaction(e) {
 
     const monthYYYYMM = transactionMonthInput ? transactionMonthInput.value : '';
     const area = transactionAreaInput ? transactionAreaInput.value.trim() : '';
+    const tipo = transactionTypeInput ? transactionTypeInput.value : 'temporario_manual';
+    const origem = transactionOriginInput ? transactionOriginInput.value : 'Outros';
+    const status = transactionStatusInput ? transactionStatusInput.value : 'OK';
     const newAmount = +amountInput.value; // O '+' converte para número
     const description = descriptionInput.value.trim();
 
@@ -168,6 +225,10 @@ function addTransaction(e) {
             if (prevMeta.type === 'recurring_cost' && prevMeta.recurringCostId) {
                 const cost = recurringCosts.find(c => c.id === prevMeta.recurringCostId);
                 if (cost) {
+                    cost.type = tipo;
+                    cost.origem = origem;
+                    cost.statusPadrao = status;
+
                     // Se o usuário alterar o mês, remove o lançamento antigo daquele mês (evita duplicar).
                     if (prevMonth && prevMonth !== monthYYYYMM) {
                         transactions = transactions.filter(tx => {
@@ -179,7 +240,8 @@ function addTransaction(e) {
                             );
                         });
 
-                        if (cost.type === 'variavel') {
+                        const prevTipo = prevMeta.tipo ?? prevMeta.costType ?? '';
+                        if (prevTipo === 'variavel_manual' || prevTipo === 'variavel') {
                             variableCostOverrides = variableCostOverrides.filter(o => {
                                 return !(o.costId === prevMeta.recurringCostId && o.month === prevMonth);
                             });
@@ -190,10 +252,10 @@ function addTransaction(e) {
                     cost.description = description;
                     cost.area = area;
 
-                    if (cost.type === 'fixo') {
-                        cost.amount = Math.abs(newAmount);
-                    } else {
+                    if (isVariableTipoCode(cost.type)) {
                         setVariableOverrideAmount(cost.id, monthYYYYMM, Math.abs(newAmount));
+                    } else {
+                        cost.amount = Math.abs(newAmount);
                     }
 
                     setJSONToLocalStorage(STORAGE_KEYS.recurringCosts, recurringCosts);
@@ -220,6 +282,9 @@ function addTransaction(e) {
             transactions[idx].area = area;
             if (!transactions[idx].meta) transactions[idx].meta = {};
             transactions[idx].meta.month = monthYYYYMM;
+            transactions[idx].meta.tipo = tipo;
+            transactions[idx].meta.origem = origem;
+            transactions[idx].meta.status = status;
 
             saveTransactionsToLocalStorage(transactions);
             init();
@@ -239,7 +304,10 @@ function addTransaction(e) {
         area,
         meta: {
             month: monthYYYYMM,
-            type: 'manual_transaction'
+            type: 'manual_transaction',
+            tipo,
+            origem,
+            status
         }
     };
 
@@ -305,6 +373,8 @@ const costDescriptionInput = document.getElementById('cost-description');
 const costAreaInput = document.getElementById('cost-area');
 const costCreditCardSelect = document.getElementById('cost-credit-card');
 const costTypeSelect = document.getElementById('cost-type');
+const costOriginSelect = document.getElementById('cost-origin');
+const costStatusPadraoSelect = document.getElementById('cost-status-padrao');
 const costAmountInput = document.getElementById('cost-amount');
 const costStartMonthInput = document.getElementById('cost-start-month');
 const costEndMonthInput = document.getElementById('cost-end-month');
@@ -347,6 +417,9 @@ function setVariableOverrideAmount(costId, monthYYYYMM, amount) {
 function upsertCostTransaction(cost, monthYYYYMM, amountAbs) {
     const expenseAmount = -Math.abs(amountAbs);
     const description = `${cost.description} (${monthYYYYMM})`;
+    const tipoCode = cost.type;
+    const origem = cost.origem ?? 'Outros';
+    const status = isVariableTipoCode(cost.type) ? 'OK' : (cost.statusPadrao ?? 'OK');
 
     if (!Array.isArray(transactions)) return;
 
@@ -362,7 +435,10 @@ function upsertCostTransaction(cost, monthYYYYMM, amountAbs) {
         if (!transactions[idx].meta) transactions[idx].meta = {};
         transactions[idx].meta.creditCardId = cost.creditCardId ?? null;
         transactions[idx].area = cost.area ?? '';
-        transactions[idx].meta.costType = cost.type;
+        transactions[idx].meta.costType = cost.type; // compatibilidade
+        transactions[idx].meta.tipo = tipoCode;
+        transactions[idx].meta.origem = origem;
+        transactions[idx].meta.status = status;
     } else {
         transactions.push({
             id: generateID(),
@@ -374,7 +450,10 @@ function upsertCostTransaction(cost, monthYYYYMM, amountAbs) {
                 month: monthYYYYMM,
                 recurringCostId: cost.id,
                 creditCardId: cost.creditCardId ?? null,
-                costType: cost.type
+                costType: cost.type, // compatibilidade
+                tipo: tipoCode,
+                origem,
+                status
             }
         });
     }
@@ -429,11 +508,11 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
 
     activeCosts.forEach(cost => {
         const amount =
-            cost.type === 'fixo'
-                ? Math.abs(cost.amount)
-                : overridesMap.has(cost.id)
+            isVariableTipoCode(cost.type)
+                ? (overridesMap.has(cost.id)
                     ? Math.abs(overridesMap.get(cost.id))
-                    : Math.abs(cost.amount);
+                    : Math.abs(cost.amount))
+                : Math.abs(cost.amount);
 
         total += amount;
 
@@ -443,6 +522,8 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
                 ? (creditCards.find(c => String(c.id) === String(costCardId))?.name ?? 'Cartão')
                 : 'Sem cartão';
         const areaName = cost.area ? String(cost.area) : 'Sem área';
+        const origemName = cost.origem ? String(cost.origem) : 'Outros';
+        const statusName = isVariableTipoCode(cost.type) ? 'OK' : (cost.statusPadrao ?? 'OK');
 
         const li = document.createElement('li');
         li.className = 'cost-item';
@@ -450,13 +531,12 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
         li.innerHTML = `
             <div class="cost-left">
                 <div class="cost-description">${cost.description}</div>
-                <div class="cost-meta">Tipo: ${cost.type === 'fixo' ? 'Fixo' : 'Variável'} | Cartão: ${cardName} | Área: ${areaName}</div>
+                <div class="cost-meta">Tipo: ${getTipoLabel(cost.type)} | Origem: ${origemName} | Status: ${statusName} | Cartão: ${cardName} | Área: ${areaName}</div>
             </div>
             <div class="cost-right">
                 ${
-                    cost.type === 'fixo'
-                        ? `<div class="cost-amount-display">R$ ${amount.toFixed(2)}</div>`
-                        : `
+                    isVariableTipoCode(cost.type)
+                        ? `
                             <div class="cost-amount-input-wrap">
                                 <input
                                     type="number"
@@ -467,11 +547,12 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
                                 />
                             </div>
                           `
+                        : `<div class="cost-amount-display">R$ ${amount.toFixed(2)}</div>`
                 }
             </div>
         `;
 
-        if (cost.type === 'variavel') {
+        if (isVariableTipoCode(cost.type)) {
             const input = li.querySelector('.variable-amount-input');
             input.addEventListener('change', (e) => {
                 const value = +e.target.value;
@@ -508,9 +589,9 @@ function postMonthCostsToHistory() {
 
     activeCosts.forEach(cost => {
         const amount =
-            cost.type === 'fixo'
-                ? Math.abs(cost.amount)
-                : getVariableOverrideAmount(cost.id, monthYYYYMM) ?? Math.abs(cost.amount);
+            isVariableTipoCode(cost.type)
+                ? getVariableOverrideAmount(cost.id, monthYYYYMM) ?? Math.abs(cost.amount)
+                : Math.abs(cost.amount);
 
         upsertCostTransaction(cost, monthYYYYMM, amount);
     });
@@ -550,9 +631,15 @@ if (costRecurringForm) {
         const startMonth = costStartMonthInput.value;
         const endMonthRaw = costEndMonthInput.value;
         const endMonth = endMonthRaw ? endMonthRaw : null;
+        const origem = costOriginSelect ? costOriginSelect.value : 'Outros';
+        let statusPadrao = costStatusPadraoSelect ? costStatusPadraoSelect.value : 'OK';
+        if (type !== 'fixo_automatico') {
+            // As categorias manuais (fixo manual/variável manual/temporário manual) devem sair como OK por padrão
+            statusPadrao = 'OK';
+        }
 
-        if (!description || !type || !startMonth || !Number.isFinite(amount)) {
-            alert('Preencha descrição, tipo, valor e mês de início.');
+        if (!description || !type || !origem || !startMonth || !Number.isFinite(amount)) {
+            alert('Preencha descrição, tipo, valor, origem e mês de início.');
             return;
         }
 
@@ -568,7 +655,9 @@ if (costRecurringForm) {
             area,
             startMonth,
             endMonth,
-            creditCardId
+            creditCardId,
+            origem,
+            statusPadrao
         };
 
         recurringCosts.push(recurringCost);
@@ -701,11 +790,11 @@ function renderInvoicesForMonth(monthYYYYMM) {
     const grouped = new Map();
     activeCosts.forEach(cost => {
         const amount =
-            cost.type === 'fixo'
-                ? Math.abs(cost.amount)
-                : overridesMap.has(cost.id)
+            isVariableTipoCode(cost.type)
+                ? (overridesMap.has(cost.id)
                     ? Math.abs(overridesMap.get(cost.id))
-                    : Math.abs(cost.amount);
+                    : Math.abs(cost.amount))
+                : Math.abs(cost.amount);
 
         const cardKey = cost.creditCardId ? String(cost.creditCardId) : 'none';
         if (!grouped.has(cardKey)) {
@@ -718,7 +807,8 @@ function renderInvoicesForMonth(monthYYYYMM) {
 
     // Inclui compras lançadas diretamente no cartão (avulsas) do mês
     const purchasesForMonth = transactions.filter(t => {
-        return t.amount < 0 && t.meta && t.meta.type === 'credit_card_purchase' && t.meta.month === monthYYYYMM;
+        const status = t.meta?.status ?? 'OK';
+        return t.amount < 0 && t.meta && t.meta.type === 'credit_card_purchase' && t.meta.month === monthYYYYMM && status !== 'Pendente';
     });
 
     purchasesForMonth.forEach(tx => {
@@ -786,6 +876,8 @@ const purchaseForm = document.getElementById('credit-card-purchase-form');
 const purchaseDescriptionInput = document.getElementById('purchase-description');
 const purchaseAmountInput = document.getElementById('purchase-amount');
 const purchaseAreaInput = document.getElementById('purchase-area');
+const purchaseOriginSelect = document.getElementById('purchase-origin');
+const purchaseStatusSelect = document.getElementById('purchase-status');
 
 function renderPurchaseCardSelectOptions() {
     if (!purchaseCardSelect) return;
@@ -832,8 +924,10 @@ if (purchaseForm) {
         const description = purchaseDescriptionInput ? purchaseDescriptionInput.value.trim() : '';
         const amount = purchaseAmountInput ? +purchaseAmountInput.value : NaN;
         const area = purchaseAreaInput ? purchaseAreaInput.value.trim() : '';
+        const origem = purchaseOriginSelect ? purchaseOriginSelect.value : 'Cartão';
+        const status = purchaseStatusSelect ? purchaseStatusSelect.value : 'OK';
 
-        if (!monthYYYYMM || !cardId || !description || !Number.isFinite(amount)) {
+        if (!monthYYYYMM || !cardId || !description || !Number.isFinite(amount) || !origem || !status) {
             alert('Preencha mês, cartão, descrição e valor.');
             return;
         }
@@ -847,7 +941,10 @@ if (purchaseForm) {
                 type: 'credit_card_purchase',
                 month: monthYYYYMM,
                 creditCardId: cardId,
-                costType: 'Cartão (compra avulsa)'
+                costType: 'temporario_manual',
+                tipo: 'temporario_manual',
+                origem,
+                status
             }
         };
 
@@ -883,6 +980,8 @@ const cardStatementItemForm = document.getElementById('card-statement-item-form'
 const cardStatementItemDescriptionInput = document.getElementById('card-statement-item-description');
 const cardStatementItemAmountInput = document.getElementById('card-statement-item-amount');
 const cardStatementItemAreaInput = document.getElementById('card-statement-item-area');
+const cardStatementItemOriginSelect = document.getElementById('card-statement-item-origin');
+const cardStatementItemStatusSelect = document.getElementById('card-statement-item-status');
 const cardStatementItemList = document.getElementById('card-statement-item-list');
 
 function renderCardStatementSelectOptions() {
@@ -944,6 +1043,8 @@ function calculateCardStatementTotals(statement) {
     const closingTotal = statement && Number.isFinite(+statement.closingTotal) ? +statement.closingTotal : 0;
     const items = statement && Array.isArray(statement.items) ? statement.items : [];
     const usedTotal = items.reduce((acc, it) => {
+        const status = it && it.status ? it.status : 'OK';
+        if (status !== 'OK') return acc;
         const amt = Math.abs(Number(it.amount) || 0);
         return acc + amt;
     }, 0);
@@ -992,7 +1093,11 @@ function renderCardStatementForSelected() {
         li.innerHTML = `
             <div class="statement-left">
                 <div class="statement-desc">${item.description}</div>
-                <div class="statement-meta">${item.area ? `Área: ${item.area}` : 'Área: (não informada)'}</div>
+                <div class="statement-meta">${[
+                    item.area ? `Área: ${item.area}` : 'Área: (não informada)',
+                    item.origem ? `Origem: ${item.origem}` : '',
+                    item.status ? `Status: ${item.status}` : ''
+                ].filter(Boolean).join(' | ')}</div>
             </div>
             <div class="statement-right" style="display:flex; gap:10px; align-items:center;">
                 <div class="invoice-total">R$ ${Number(item.amount).toFixed(2)}</div>
@@ -1082,9 +1187,11 @@ if (cardStatementItemForm) {
         const description = cardStatementItemDescriptionInput ? cardStatementItemDescriptionInput.value.trim() : '';
         const amount = cardStatementItemAmountInput ? +cardStatementItemAmountInput.value : NaN;
         const area = cardStatementItemAreaInput ? cardStatementItemAreaInput.value.trim() : '';
+        const origem = cardStatementItemOriginSelect ? cardStatementItemOriginSelect.value : 'Cartão';
+        const status = cardStatementItemStatusSelect ? cardStatementItemStatusSelect.value : 'OK';
 
-        if (!description || !Number.isFinite(amount)) {
-            alert('Preencha descrição e valor.');
+        if (!description || !Number.isFinite(amount) || !origem || !status) {
+            alert('Preencha descrição, valor, origem e status.');
             return;
         }
 
@@ -1096,7 +1203,10 @@ if (cardStatementItemForm) {
             id: generateID(),
             description,
             amount: Math.abs(amount),
-            area
+            area,
+            origem,
+            status,
+            tipo: 'temporario_manual'
         });
 
         // Se o fechamento ainda não existir, tenta usar o valor digitado
@@ -1124,20 +1234,31 @@ if (cardStatementItemForm) {
 // -------------------------
 const analyticsMonthInput = document.getElementById('analytics-month');
 const analyticsAreaList = document.getElementById('analytics-area-list');
+const analyticsOriginList = document.getElementById('analytics-origin-list');
 const typePieCanvas = document.getElementById('type-pie-chart');
 let typePieChartInstance = null;
+const typeBarCanvas = document.getElementById('type-bar-chart');
+let typeBarChartInstance = null;
 
 function renderAnalyticsForMonth(monthYYYYMM) {
-    if (!analyticsMonthInput || !analyticsAreaList) return;
+    if (!analyticsAreaList) return;
 
     const areaTotals = new Map();
-    const typeTotals = new Map();
+    const typeTotals = new Map(); // key = label (Fixo Manual etc)
+    const originTotals = new Map();
 
-    function addToMaps(areaKey, typeKey, amountAbs) {
+    function addExpense(areaKey, tipoCode, origem, status, amountAbs) {
+        const s = status ?? 'OK';
+        if (s === 'Pendente') return;
         const a = areaKey ? String(areaKey) : 'Sem área';
-        const t = typeKey ? String(typeKey) : 'Outros';
-        areaTotals.set(a, (areaTotals.get(a) || 0) + amountAbs);
-        typeTotals.set(t, (typeTotals.get(t) || 0) + amountAbs);
+        const tipoLabel = getTipoLabel(tipoCode);
+        const o = origem ? String(origem) : 'Outros';
+        const amt = Math.abs(Number(amountAbs) || 0);
+        if (!amt) return;
+
+        areaTotals.set(a, (areaTotals.get(a) || 0) + amt);
+        typeTotals.set(tipoLabel, (typeTotals.get(tipoLabel) || 0) + amt);
+        originTotals.set(o, (originTotals.get(o) || 0) + amt);
     }
 
     // Recorrentes (previsto/esperado para o mês)
@@ -1147,46 +1268,66 @@ function renderAnalyticsForMonth(monthYYYYMM) {
 
     activeCosts.forEach(cost => {
         const amountAbs =
-            cost.type === 'fixo'
-                ? Math.abs(cost.amount)
-                : overridesMap.has(cost.id)
+            isVariableTipoCode(cost.type)
+                ? (overridesMap.has(cost.id)
                     ? Math.abs(overridesMap.get(cost.id))
-                    : Math.abs(cost.amount);
+                    : Math.abs(cost.amount))
+                : Math.abs(cost.amount);
 
-        const areaKey = cost.area ? cost.area : 'Sem área';
-        const typeKey = cost.type === 'fixo' ? 'Fixo' : 'Variável';
-        addToMaps(areaKey, typeKey, amountAbs);
+        const status = isVariableTipoCode(cost.type) ? 'OK' : (cost.statusPadrao ?? 'OK');
+        addExpense(cost.area, cost.type, cost.origem, status, amountAbs);
     });
 
     // Compras avulsas no cartão (lançadas no mês)
     const purchases = transactions.filter(t => {
-        return t.amount < 0 && t.meta && t.meta.type === 'credit_card_purchase' && t.meta.month === monthYYYYMM;
+        const meta = t.meta || {};
+        return t.amount < 0 && meta.type === 'credit_card_purchase' && meta.month === monthYYYYMM;
     });
 
     purchases.forEach(tx => {
-        addToMaps(tx.area ? tx.area : 'Sem área', 'Cartão (compra avulsa)', Math.abs(tx.amount));
+        addExpense(tx.area, tx.meta?.tipo ?? 'temporario_manual', tx.meta?.origem ?? getOrigemLabel(tx.meta), tx.meta?.status ?? 'OK', tx.amount);
     });
 
     // Itens do fechamento do cartão (deduções) no mês
     const statementsForMonth = (creditCardMonthlyStatements || []).filter(s => s && s.month === monthYYYYMM);
     statementsForMonth.forEach(statement => {
         const items = Array.isArray(statement.items) ? statement.items : [];
+        let usedTotal = 0;
+
         items.forEach(it => {
+            const status = it.status ?? 'OK';
+            if (status === 'Pendente') return;
             const amountAbs = Math.abs(Number(it.amount) || 0);
             if (!amountAbs) return;
-            addToMaps(it.area ? it.area : 'Sem área', 'Cartão (fechamento)', amountAbs);
+            usedTotal += amountAbs;
+
+            addExpense(it.area, 'temporario_manual', it.origem ?? 'Cartão', status, amountAbs);
         });
+
+        const closingTotal = statement && Number.isFinite(+statement.closingTotal) ? +statement.closingTotal : 0;
+        const remaining = closingTotal - usedTotal;
+        if (remaining > 0.000001) {
+            addExpense('Outros', 'temporario_manual', 'Cartão', 'OK', remaining);
+        }
     });
 
-    // Outras despesas manuais (não contam as recorrências já modeladas)
+    // Lançamentos manuais (não contam recorrências/compra avulsa)
     const manualExpenses = transactions.filter(t => {
-        const txType = t.meta ? t.meta.type : null;
-        const txMonth = t.meta && t.meta.month ? t.meta.month : getCurrentMonthYYYYMM();
-        return t.amount < 0 && txType !== 'recurring_cost' && txType !== 'credit_card_purchase' && txMonth === monthYYYYMM;
+        const meta = t.meta || {};
+        const txMonth = meta.month ? meta.month : getCurrentMonthYYYYMM();
+        const txType = meta.type;
+        const isManualLike = !txType || txType === 'manual_transaction';
+        return t.amount < 0 && isManualLike && meta.type !== 'recurring_cost' && meta.type !== 'credit_card_purchase' && txMonth === monthYYYYMM;
     });
 
     manualExpenses.forEach(tx => {
-        addToMaps(tx.area ? tx.area : 'Sem área', 'Outras despesas', Math.abs(tx.amount));
+        addExpense(
+            tx.area,
+            tx.meta?.tipo ?? tx.meta?.costType ?? 'temporario_manual',
+            tx.meta?.origem ?? getOrigemLabel(tx.meta),
+            tx.meta?.status ?? 'OK',
+            Math.abs(tx.amount)
+        );
     });
 
     // Render lista por área
@@ -1195,7 +1336,6 @@ function renderAnalyticsForMonth(monthYYYYMM) {
         .sort((a, b) => b.total - a.total);
 
     analyticsAreaList.innerHTML = '';
-
     if (areaArr.length === 0) {
         const li = document.createElement('li');
         li.textContent = 'Nenhuma despesa neste mês.';
@@ -1211,37 +1351,62 @@ function renderAnalyticsForMonth(monthYYYYMM) {
         });
     }
 
-    // Render gráfico pizza por tipo
+    // Render lista por origem
+    if (analyticsOriginList) {
+        const originArr = Array.from(originTotals.entries())
+            .map(([origin, total]) => ({ origin, total }))
+            .sort((a, b) => b.total - a.total);
+
+        analyticsOriginList.innerHTML = '';
+        if (originArr.length === 0) {
+            const li = document.createElement('li');
+            li.textContent = 'Nenhuma despesa por origem neste mês.';
+            analyticsOriginList.appendChild(li);
+        } else {
+            originArr.forEach(item => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>${item.origin}</span>
+                    <span class="analysis-total">R$ ${item.total.toFixed(2)}</span>
+                `;
+                analyticsOriginList.appendChild(li);
+            });
+        }
+    }
+
+    // Gráficos (pizza e barras) por tipo
+    if (!typePieCanvas || typeof Chart === 'undefined') return;
+
     const typeArr = Array.from(typeTotals.entries())
         .map(([type, total]) => ({ type, total }))
         .sort((a, b) => b.total - a.total);
 
-    if (!typePieCanvas || typeof Chart === 'undefined') return;
-
     const labels = typeArr.map(x => x.type);
     const data = typeArr.map(x => Number(x.total.toFixed(2)));
 
-    const colors = [
-        '#0d6efd', '#6610f2', '#dc3545', '#fd7e14', '#20c997', '#6f42c1', '#198754', '#e83e8c'
-    ];
+    const colorsByType = {
+        'Fixo Automático': '#4dabf7',
+        'Fixo Manual': '#20c997',
+        'Variável Manual': '#ffd43b',
+        'Temporário Manual': '#ff922b'
+    };
 
-    if (typePieChartInstance) {
-        typePieChartInstance.destroy();
-    }
+    const getColor = (label) => colorsByType[label] ?? '#6f42c1';
 
+    if (typePieChartInstance) typePieChartInstance.destroy();
     typePieChartInstance = new Chart(typePieCanvas.getContext('2d'), {
         type: 'pie',
         data: {
             labels,
             datasets: [{
                 data,
-                backgroundColor: labels.map((_, i) => colors[i % colors.length])
+                backgroundColor: labels.map(l => getColor(l))
             }]
         },
         options: {
             responsive: false,
             plugins: {
-                legend: { position: 'bottom' },
+                legend: { position: 'bottom', labels: { color: '#e6edf3' } },
                 tooltip: {
                     callbacks: {
                         label: function (context) {
@@ -1253,6 +1418,43 @@ function renderAnalyticsForMonth(monthYYYYMM) {
             }
         }
     });
+
+    // Barras comparando os 4 tipos principais
+    if (typeBarCanvas && typeof Chart !== 'undefined') {
+        const barCategories = ['Fixo Automático', 'Fixo Manual', 'Variável Manual', 'Temporário Manual'];
+        const barData = barCategories.map(c => Number((typeTotals.get(c) || 0).toFixed(2)));
+
+        if (typeBarChartInstance) typeBarChartInstance.destroy();
+
+        typeBarChartInstance = new Chart(typeBarCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: barCategories,
+                datasets: [{
+                    label: 'Total no mês',
+                    data: barData,
+                    backgroundColor: barCategories.map(c => getColor(c))
+                }]
+            },
+            options: {
+                responsive: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#e6edf3' },
+                        grid: { color: 'rgba(255,255,255,0.06)' }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#e6edf3' },
+                        grid: { color: 'rgba(255,255,255,0.06)' }
+                    }
+                }
+            }
+        });
+    }
 }
 
 if (analyticsMonthInput) {

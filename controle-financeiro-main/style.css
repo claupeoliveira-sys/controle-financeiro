@@ -237,6 +237,23 @@ h2, h3 {
     border-bottom: 0;
 }
 
+#analytics-origin-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+#analytics-origin-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--border-color);
+}
+
+#analytics-origin-list li:last-child {
+    border-bottom: 0;
+}
+
 .monthly-total {
     text-align: center;
     margin: 10px 0 20px;

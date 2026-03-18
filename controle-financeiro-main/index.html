@@ -65,6 +65,36 @@
                         </div>
                     </div>
 
+                    <div class="form-row">
+                        <div class="form-control">
+                            <label for="transaction-type">Tipo</label>
+                            <select id="transaction-type" required>
+                                <option value="temporario_manual">Temporário Manual</option>
+                                <option value="variavel_manual">Variável Manual</option>
+                                <option value="fixo_manual">Fixo Manual</option>
+                                <option value="fixo_automatico">Fixo Automático</option>
+                            </select>
+                        </div>
+                        <div class="form-control">
+                            <label for="transaction-origin">Origem</label>
+                            <select id="transaction-origin" required>
+                                <option value="Outros">Outros</option>
+                                <option value="Boleto">Boleto</option>
+                                <option value="Cartão">Cartão</option>
+                                <option value="PIX">PIX</option>
+                            </select>
+                        </div>
+                        <div class="form-control">
+                            <label for="transaction-status">Status</label>
+                            <select id="transaction-status" required>
+                                <option value="OK">OK</option>
+                                <option value="Pendente">Pendente</option>
+                                <option value="AUTO">AUTO</option>
+                                <option value="ANUAL">ANUAL</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div class="form-control">
                         <label for="amount">Valor (negativo para despesas, positivo para receitas)</label>
                         <input type="number" id="amount" placeholder="Ex: -50 (despesa) ou 100 (receita)" step="0.01" required>
@@ -126,14 +156,36 @@
                     <div class="form-control">
                         <label for="cost-type">Tipo</label>
                         <select id="cost-type" required>
-                            <option value="fixo">Fixo</option>
-                            <option value="variavel">Variável</option>
+                            <option value="fixo_automatico">Fixo Automático</option>
+                            <option value="fixo_manual">Fixo Manual</option>
+                            <option value="variavel_manual">Variável Manual</option>
+                            <option value="temporario_manual">Temporário Manual</option>
                         </select>
                     </div>
 
                     <div class="form-control">
                         <label for="cost-amount">Valor (para Fixo; para Variável como valor inicial)</label>
                         <input type="number" id="cost-amount" placeholder="Ex: 120.50" step="0.01" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-control">
+                            <label for="cost-origin">Origem</label>
+                            <select id="cost-origin" required>
+                                <option value="Outros">Outros</option>
+                                <option value="Boleto">Boleto</option>
+                                <option value="Cartão">Cartão</option>
+                                <option value="PIX">PIX</option>
+                            </select>
+                        </div>
+                        <div class="form-control">
+                            <label for="cost-status-padrao">Status Padrão</label>
+                            <select id="cost-status-padrao" required>
+                                <option value="AUTO">AUTO</option>
+                                <option value="OK">OK</option>
+                                <option value="ANUAL">ANUAL</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="form-row">
@@ -193,6 +245,27 @@
                             <label for="purchase-card-select">Cartão</label>
                             <select id="purchase-card-select" required>
                                 <option value="">Selecione</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-control">
+                            <label for="purchase-origin">Origem</label>
+                            <select id="purchase-origin" required>
+                                <option value="Cartão" selected>Cartão</option>
+                                <option value="Boleto">Boleto</option>
+                                <option value="PIX">PIX</option>
+                                <option value="Outros">Outros</option>
+                            </select>
+                        </div>
+                        <div class="form-control">
+                            <label for="purchase-status">Status</label>
+                            <select id="purchase-status" required>
+                                <option value="OK" selected>OK</option>
+                                <option value="Pendente">Pendente</option>
+                                <option value="AUTO">AUTO</option>
+                                <option value="ANUAL">ANUAL</option>
                             </select>
                         </div>
                     </div>
@@ -265,6 +338,27 @@
                             </div>
                         </div>
 
+                        <div class="form-row">
+                            <div class="form-control">
+                                <label for="card-statement-item-origin">Origem</label>
+                                <select id="card-statement-item-origin" required>
+                                    <option value="Cartão" selected>Cartão</option>
+                                    <option value="Boleto">Boleto</option>
+                                    <option value="PIX">PIX</option>
+                                    <option value="Outros">Outros</option>
+                                </select>
+                            </div>
+                            <div class="form-control">
+                                <label for="card-statement-item-status">Status</label>
+                                <select id="card-statement-item-status" required>
+                                    <option value="OK" selected>OK</option>
+                                    <option value="Pendente">Pendente</option>
+                                    <option value="AUTO">AUTO</option>
+                                    <option value="ANUAL">ANUAL</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <button class="btn secondary" type="submit">Deduzir valor</button>
                     </form>
                 </div>
@@ -312,11 +406,17 @@
                     <ul id="analytics-area-list">
                         <!-- Itens renderizados via JavaScript -->
                     </ul>
+                    <h4>Totais por Origem</h4>
+                    <ul id="analytics-origin-list">
+                        <!-- Itens renderizados via JavaScript -->
+                    </ul>
                 </div>
 
                 <div class="analysis-card">
                     <h4>Gráfico de Pizza por Tipo</h4>
                     <canvas id="type-pie-chart" width="320" height="320"></canvas>
+                    <h4>Comparativo por Tipo</h4>
+                    <canvas id="type-bar-chart" width="420" height="260"></canvas>
                 </div>
             </div>
         </div>
