@@ -33,7 +33,7 @@ body {
     border-radius: 8px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     width: 90%;
-    max-width: 400px;
+    max-width: 900px;
     margin: 20px auto;
 }
 
@@ -94,6 +94,16 @@ h2, h3 {
 
 #transaction-list li.minus {
     border-right: 5px solid var(--danger-color);
+}
+
+#transaction-list li .tx-desc {
+    font-weight: bold;
+}
+
+#transaction-list li .tx-meta {
+    color: #666;
+    font-size: 12px;
+    margin-top: 2px;
 }
 
 #transaction-list li .delete-btn {
@@ -161,6 +171,53 @@ h2, h3 {
 
 .btn.secondary:hover {
     background-color: #5a6268;
+}
+
+.edit-btn {
+    cursor: pointer;
+    background-color: #0d6efd;
+    border: 0;
+    color: #fff;
+    font-size: 16px;
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+
+.edit-btn:hover {
+    background-color: #0b5ed7;
+}
+
+.analysis-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 14px;
+    align-items: start;
+    margin-top: 10px;
+}
+
+.analysis-card {
+    background-color: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.analysis-total {
+    font-weight: bold;
+    text-align: right;
+}
+
+#analytics-area-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px dashed #eee;
+}
+
+#analytics-area-list li:last-child {
+    border-bottom: 0;
 }
 
 .monthly-total {
@@ -338,6 +395,10 @@ h2, h3 {
 @media (max-width: 600px) {
     .container {
         padding: 20px;
+    }
+
+    .analysis-grid {
+        grid-template-columns: 1fr;
     }
 
     .form-row {
