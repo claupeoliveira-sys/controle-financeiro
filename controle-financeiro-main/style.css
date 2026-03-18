@@ -261,6 +261,41 @@ h2, h3 {
     font-weight: bold;
 }
 
+.invoice-section {
+    margin-top: 20px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+#invoice-list {
+    list-style-type: none;
+    padding: 0;
+    margin-top: 10px;
+}
+
+.invoice-item {
+    background-color: var(--card-bg);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.invoice-name {
+    font-weight: bold;
+    word-break: break-word;
+}
+
+.invoice-total {
+    font-weight: bold;
+    text-align: right;
+    white-space: nowrap;
+}
+
 .form-control {
     margin: 0 0 15px;
 }

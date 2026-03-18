@@ -152,6 +152,7 @@ const postMonthCostsHint = document.getElementById('post-month-costs-hint');
 
 const costRecurringForm = document.getElementById('cost-recurring-form');
 const costDescriptionInput = document.getElementById('cost-description');
+const costCreditCardSelect = document.getElementById('cost-credit-card');
 const costTypeSelect = document.getElementById('cost-type');
 const costAmountInput = document.getElementById('cost-amount');
 const costStartMonthInput = document.getElementById('cost-start-month');
@@ -207,6 +208,8 @@ function upsertCostTransaction(cost, monthYYYYMM, amountAbs) {
     if (idx >= 0) {
         transactions[idx].amount = expenseAmount;
         transactions[idx].description = description;
+        if (!transactions[idx].meta) transactions[idx].meta = {};
+        transactions[idx].meta.creditCardId = cost.creditCardId ?? null;
     } else {
         transactions.push({
             id: generateID(),
@@ -215,12 +218,38 @@ function upsertCostTransaction(cost, monthYYYYMM, amountAbs) {
             meta: {
                 type: metaType,
                 month: monthYYYYMM,
-                recurringCostId: cost.id
+                recurringCostId: cost.id,
+                creditCardId: cost.creditCardId ?? null
             }
         });
     }
 
     saveTransactionsToLocalStorage(transactions);
+}
+
+function renderCostCreditCardSelectOptions() {
+    if (!costCreditCardSelect) return;
+
+    const currentValue = costCreditCardSelect.value;
+    costCreditCardSelect.innerHTML = '';
+
+    const noneOpt = document.createElement('option');
+    noneOpt.value = '';
+    noneOpt.textContent = 'Sem cartão';
+    costCreditCardSelect.appendChild(noneOpt);
+
+    creditCards.forEach(card => {
+        const opt = document.createElement('option');
+        opt.value = String(card.id);
+        opt.textContent = card.name;
+        costCreditCardSelect.appendChild(opt);
+    });
+
+    if (currentValue && creditCards.some(c => String(c.id) === currentValue)) {
+        costCreditCardSelect.value = currentValue;
+    } else {
+        costCreditCardSelect.value = '';
+    }
 }
 
 function renderRecurringCostsForMonth(monthYYYYMM) {
@@ -253,13 +282,19 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
 
         total += amount;
 
+        const costCardId = cost.creditCardId ?? null;
+        const cardName =
+            costCardId
+                ? (creditCards.find(c => String(c.id) === String(costCardId))?.name ?? 'Cartão')
+                : 'Sem cartão';
+
         const li = document.createElement('li');
         li.className = 'cost-item';
 
         li.innerHTML = `
             <div class="cost-left">
                 <div class="cost-description">${cost.description}</div>
-                <div class="cost-meta">Tipo: ${cost.type === 'fixo' ? 'Fixo' : 'Variável'}</div>
+                <div class="cost-meta">Tipo: ${cost.type === 'fixo' ? 'Fixo' : 'Variável'} | Cartão: ${cardName}</div>
             </div>
             <div class="cost-right">
                 ${
@@ -293,6 +328,9 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
                 // Re-renderiza saldo e histórico (mesmo estando em outra "tela")
                 init();
                 renderRecurringCostsForMonth(monthYYYYMM);
+                if (invoiceMonthInput && invoiceMonthInput.value === monthYYYYMM) {
+                    renderInvoicesForMonth(monthYYYYMM);
+                }
 
                 if (postMonthCostsHint) {
                     postMonthCostsHint.textContent = 'Valor variável atualizado no histórico.';
@@ -324,6 +362,10 @@ function postMonthCostsToHistory() {
     init();
     if (postMonthCostsHint) {
         postMonthCostsHint.textContent = 'Custos lançados/atualizados no histórico.';
+    }
+
+    if (invoiceMonthInput && invoiceMonthInput.value === monthYYYYMM) {
+        renderInvoicesForMonth(monthYYYYMM);
     }
 }
 
@@ -358,13 +400,17 @@ if (costRecurringForm) {
             return;
         }
 
+        const creditCardIdRaw = costCreditCardSelect ? costCreditCardSelect.value : '';
+        const creditCardId = creditCardIdRaw ? +creditCardIdRaw : null;
+
         const recurringCost = {
             id: generateID(),
             description,
             type,
             amount: Math.abs(amount),
             startMonth,
-            endMonth
+            endMonth,
+            creditCardId
         };
 
         recurringCosts.push(recurringCost);
@@ -373,6 +419,10 @@ if (costRecurringForm) {
         // Re-renderiza a lista do mês atual
         if (costMonthInput) {
             renderRecurringCostsForMonth(costMonthInput.value);
+        }
+
+        if (invoiceMonthInput && invoiceMonthInput.value) {
+            renderInvoicesForMonth(invoiceMonthInput.value);
         }
 
         costDescriptionInput.value = '';
@@ -453,6 +503,10 @@ if (creditCardForm) {
 
         setJSONToLocalStorage(STORAGE_KEYS.creditCards, creditCards);
         renderCreditCardsList();
+        renderCostCreditCardSelectOptions();
+        if (invoiceMonthInput && invoiceMonthInput.value) {
+            renderInvoicesForMonth(invoiceMonthInput.value);
+        }
 
         creditCardNameInput.value = '';
         creditCardAnnualTotalInput.value = '';
@@ -464,3 +518,78 @@ if (costMonthInput) {
     renderRecurringCostsForMonth(costMonthInput.value);
 }
 renderCreditCardsList();
+
+// -------------------------
+// Fatura por Cartão (novo)
+// -------------------------
+const invoiceMonthInput = document.getElementById('invoice-month');
+const invoiceList = document.getElementById('invoice-list');
+const invoiceMonthlyTotalEl = document.getElementById('invoice-monthly-total');
+
+function renderInvoicesForMonth(monthYYYYMM) {
+    if (!invoiceList || !invoiceMonthlyTotalEl) return;
+
+    const activeCosts = recurringCosts.filter(c => isCostActiveForMonth(c, monthYYYYMM));
+    const overridesForMonth = variableCostOverrides.filter(o => o.month === monthYYYYMM);
+    const overridesMap = new Map(overridesForMonth.map(o => [o.costId, o.amount]));
+
+    const grouped = new Map();
+    activeCosts.forEach(cost => {
+        const amount =
+            cost.type === 'fixo'
+                ? Math.abs(cost.amount)
+                : overridesMap.has(cost.id)
+                    ? Math.abs(overridesMap.get(cost.id))
+                    : Math.abs(cost.amount);
+
+        const cardKey = cost.creditCardId ? String(cost.creditCardId) : 'none';
+        if (!grouped.has(cardKey)) {
+            const card = cost.creditCardId ? creditCards.find(c => String(c.id) === cardKey) : null;
+            const cardName = cardKey === 'none' ? 'Sem cartão' : (card?.name ?? 'Cartão');
+            grouped.set(cardKey, { cardName, total: 0 });
+        }
+        grouped.get(cardKey).total += amount;
+    });
+
+    const groupsArr = Array.from(grouped.entries())
+        .map(([key, v]) => ({ key, ...v }))
+        .sort((a, b) => a.cardName.localeCompare(b.cardName, 'pt-BR'));
+
+    invoiceList.innerHTML = '';
+
+    const total = groupsArr.reduce((acc, g) => acc + g.total, 0);
+    invoiceMonthlyTotalEl.textContent = `R$ ${total.toFixed(2)}`;
+
+    if (groupsArr.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'empty-list-item';
+        li.textContent = 'Nenhuma conta recorrente ativa para este mês.';
+        invoiceList.appendChild(li);
+        return;
+    }
+
+    groupsArr.forEach(g => {
+        const li = document.createElement('li');
+        li.className = 'invoice-item';
+        li.innerHTML = `
+            <div class="invoice-name">${g.cardName}</div>
+            <div class="invoice-total">R$ ${g.total.toFixed(2)}</div>
+        `;
+        invoiceList.appendChild(li);
+    });
+}
+
+if (invoiceMonthInput) {
+    if (!invoiceMonthInput.value) {
+        const defaultMonth = (costMonthInput && costMonthInput.value) ? costMonthInput.value : getCurrentMonthYYYYMM();
+        invoiceMonthInput.value = defaultMonth;
+    }
+
+    invoiceMonthInput.addEventListener('change', () => {
+        renderInvoicesForMonth(invoiceMonthInput.value);
+    });
+
+    renderInvoicesForMonth(invoiceMonthInput.value);
+}
+
+renderCostCreditCardSelectOptions();

@@ -83,6 +83,13 @@
                     </div>
 
                     <div class="form-control">
+                        <label for="cost-credit-card">Cartão de crédito (opcional)</label>
+                        <select id="cost-credit-card">
+                            <option value="">Sem cartão</option>
+                        </select>
+                    </div>
+
+                    <div class="form-control">
                         <label for="cost-type">Tipo</label>
                         <select id="cost-type" required>
                             <option value="fixo">Fixo</option>
@@ -118,6 +125,24 @@
             <div class="credit-cards">
                 <h4>Seus cartões</h4>
                 <ul id="credit-cards-list">
+                    <!-- Itens serão renderizados via JavaScript -->
+                </ul>
+            </div>
+
+            <div class="invoice-section">
+                <h4>Fatura por Cartão (custos do mês)</h4>
+                <div class="form-row">
+                    <div class="form-control">
+                        <label for="invoice-month">Mês</label>
+                        <input type="month" id="invoice-month" required>
+                    </div>
+                </div>
+
+                <div class="monthly-total">
+                    Total dos custos no mês: <span id="invoice-monthly-total">R$ 0.00</span>
+                </div>
+
+                <ul id="invoice-list">
                     <!-- Itens serão renderizados via JavaScript -->
                 </ul>
             </div>
