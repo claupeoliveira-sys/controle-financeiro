@@ -11,7 +11,8 @@ const STORAGE_KEYS = {
     transactions: 'transactions',
     recurringCosts: 'recurring_costs',
     variableCostOverrides: 'variable_cost_overrides',
-    creditCards: 'credit_cards'
+    creditCards: 'credit_cards',
+    creditCardMonthlyStatements: 'credit_card_monthly_statements'
 };
 
 // Funções genéricas para Local Storage
@@ -38,6 +39,7 @@ let transactions = getTransactionsFromLocalStorage();
 let recurringCosts = getJSONFromLocalStorage(STORAGE_KEYS.recurringCosts, []);
 let variableCostOverrides = getJSONFromLocalStorage(STORAGE_KEYS.variableCostOverrides, []);
 let creditCards = getJSONFromLocalStorage(STORAGE_KEYS.creditCards, []);
+let creditCardMonthlyStatements = getJSONFromLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, []);
 
 // -------------------------
 // UI: alternar "telas"
@@ -661,6 +663,9 @@ if (creditCardForm) {
         setJSONToLocalStorage(STORAGE_KEYS.creditCards, creditCards);
         renderCreditCardsList();
         renderCostCreditCardSelectOptions();
+        if (typeof renderCardStatementSelectOptions === 'function') {
+            renderCardStatementSelectOptions();
+        }
         if (typeof renderPurchaseCardSelectOptions === 'function') {
             renderPurchaseCardSelectOptions();
         }
@@ -865,6 +870,256 @@ if (purchaseForm) {
 }
 
 // -------------------------
+// Cartões: fechamento do cartão por mês (deduções)
+// -------------------------
+const cardStatementMonthInput = document.getElementById('card-statement-month');
+const cardStatementSelect = document.getElementById('card-statement-select');
+const cardStatementClosingTotalInput = document.getElementById('card-statement-closing-total');
+const cardStatementSaveBtn = document.getElementById('card-statement-save-btn');
+const cardStatementUsedTotalEl = document.getElementById('card-statement-used-total');
+const cardStatementRemainingTotalEl = document.getElementById('card-statement-remaining-total');
+
+const cardStatementItemForm = document.getElementById('card-statement-item-form');
+const cardStatementItemDescriptionInput = document.getElementById('card-statement-item-description');
+const cardStatementItemAmountInput = document.getElementById('card-statement-item-amount');
+const cardStatementItemAreaInput = document.getElementById('card-statement-item-area');
+const cardStatementItemList = document.getElementById('card-statement-item-list');
+
+function renderCardStatementSelectOptions() {
+    if (!cardStatementSelect) return;
+
+    const currentValue = cardStatementSelect.value;
+    cardStatementSelect.innerHTML = '';
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Selecione';
+    cardStatementSelect.appendChild(placeholder);
+
+    (creditCards || []).forEach(card => {
+        const opt = document.createElement('option');
+        opt.value = String(card.id);
+        opt.textContent = card.name;
+        cardStatementSelect.appendChild(opt);
+    });
+
+    if (currentValue && creditCards.some(c => String(c.id) === String(currentValue))) {
+        cardStatementSelect.value = currentValue;
+    }
+}
+
+function findCardStatementIndex(creditCardId, monthYYYYMM) {
+    return (creditCardMonthlyStatements || []).findIndex(s => {
+        return String(s.creditCardId) === String(creditCardId) && s.month === monthYYYYMM;
+    });
+}
+
+function getSelectedStatementContext() {
+    const monthYYYYMM = cardStatementMonthInput ? cardStatementMonthInput.value : '';
+    const creditCardIdRaw = cardStatementSelect ? cardStatementSelect.value : '';
+    const creditCardId = creditCardIdRaw ? +creditCardIdRaw : null;
+    return { monthYYYYMM, creditCardId };
+}
+
+function upsertCardStatement(creditCardId, monthYYYYMM) {
+    if (!creditCardId || !monthYYYYMM) return null;
+
+    const idx = findCardStatementIndex(creditCardId, monthYYYYMM);
+    if (idx >= 0) return creditCardMonthlyStatements[idx];
+
+    const created = {
+        id: generateID(),
+        creditCardId,
+        month: monthYYYYMM,
+        closingTotal: 0,
+        items: []
+    };
+
+    creditCardMonthlyStatements.push(created);
+    setJSONToLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, creditCardMonthlyStatements);
+    return created;
+}
+
+function calculateCardStatementTotals(statement) {
+    const closingTotal = statement && Number.isFinite(+statement.closingTotal) ? +statement.closingTotal : 0;
+    const items = statement && Array.isArray(statement.items) ? statement.items : [];
+    const usedTotal = items.reduce((acc, it) => {
+        const amt = Math.abs(Number(it.amount) || 0);
+        return acc + amt;
+    }, 0);
+    const remaining = closingTotal - usedTotal;
+    return { closingTotal, usedTotal, remaining };
+}
+
+function renderCardStatementForSelected() {
+    if (!cardStatementMonthInput || !cardStatementSelect || !cardStatementClosingTotalInput) return;
+
+    const { monthYYYYMM, creditCardId } = getSelectedStatementContext();
+    if (!monthYYYYMM || !creditCardId) return;
+
+    const idx = findCardStatementIndex(creditCardId, monthYYYYMM);
+    const statement = idx >= 0 ? creditCardMonthlyStatements[idx] : null;
+
+    const totals = calculateCardStatementTotals(statement || {
+        creditCardId,
+        month: monthYYYYMM,
+        closingTotal: 0,
+        items: []
+    });
+
+    // Sincroniza input e totais
+    cardStatementClosingTotalInput.value = statement && Number.isFinite(+statement.closingTotal) ? +statement.closingTotal : '';
+    if (cardStatementUsedTotalEl) cardStatementUsedTotalEl.textContent = `R$ ${totals.usedTotal.toFixed(2)}`;
+    if (cardStatementRemainingTotalEl) cardStatementRemainingTotalEl.textContent = `R$ ${totals.remaining.toFixed(2)}`;
+
+    // Itens
+    if (!cardStatementItemList) return;
+    cardStatementItemList.innerHTML = '';
+
+    const items = statement && Array.isArray(statement.items) ? statement.items : [];
+    if (items.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'empty-list-item';
+        li.textContent = 'Nenhuma despesa deduzida para este fechamento.';
+        cardStatementItemList.appendChild(li);
+        return;
+    }
+
+    items.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'statement-item';
+        li.dataset.itemId = String(item.id);
+        li.innerHTML = `
+            <div class="statement-left">
+                <div class="statement-desc">${item.description}</div>
+                <div class="statement-meta">${item.area ? `Área: ${item.area}` : 'Área: (não informada)'}</div>
+            </div>
+            <div class="statement-right" style="display:flex; gap:10px; align-items:center;">
+                <div class="invoice-total">R$ ${Number(item.amount).toFixed(2)}</div>
+                <button class="remove-btn" type="button" onclick="removeCardStatementItemById(${item.id})">Remover</button>
+            </div>
+        `;
+        cardStatementItemList.appendChild(li);
+    });
+}
+
+function removeCardStatementItemById(itemId) {
+    if (!itemId) return;
+
+    let changed = false;
+    creditCardMonthlyStatements = (creditCardMonthlyStatements || []).map(statement => {
+        const items = Array.isArray(statement.items) ? statement.items : [];
+        const filtered = items.filter(it => it.id !== itemId);
+        if (filtered.length !== items.length) changed = true;
+        return { ...statement, items: filtered };
+    });
+
+    if (!changed) return;
+    setJSONToLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, creditCardMonthlyStatements);
+
+    renderCardStatementForSelected();
+    if (typeof renderAnalyticsForMonth === 'function' && analyticsMonthInput && analyticsMonthInput.value) {
+        renderAnalyticsForMonth(analyticsMonthInput.value);
+    }
+}
+
+if (cardStatementMonthInput && cardStatementSelect) {
+    if (!cardStatementMonthInput.value) {
+        cardStatementMonthInput.value = getCurrentMonthYYYYMM();
+    }
+
+    renderCardStatementSelectOptions();
+
+    cardStatementMonthInput.addEventListener('change', () => {
+        renderCardStatementForSelected();
+        if (analyticsMonthInput && analyticsMonthInput.value === cardStatementMonthInput.value && typeof renderAnalyticsForMonth === 'function') {
+            renderAnalyticsForMonth(cardStatementMonthInput.value);
+        }
+    });
+
+    cardStatementSelect.addEventListener('change', () => {
+        renderCardStatementForSelected();
+    });
+}
+
+if (cardStatementSaveBtn) {
+    cardStatementSaveBtn.addEventListener('click', () => {
+        const { monthYYYYMM, creditCardId } = getSelectedStatementContext();
+        if (!monthYYYYMM || !creditCardId) {
+            alert('Selecione cartão e mês.');
+            return;
+        }
+
+        const closingTotal = +cardStatementClosingTotalInput.value;
+        if (!Number.isFinite(closingTotal)) {
+            alert('Informe o valor de fechamento.');
+            return;
+        }
+
+        const statement = upsertCardStatement(creditCardId, monthYYYYMM);
+        if (!statement) return;
+
+        statement.closingTotal = Math.abs(closingTotal);
+        setJSONToLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, creditCardMonthlyStatements);
+
+        renderCardStatementForSelected();
+        if (typeof renderAnalyticsForMonth === 'function' && analyticsMonthInput && analyticsMonthInput.value === monthYYYYMM) {
+            renderAnalyticsForMonth(monthYYYYMM);
+        }
+    });
+}
+
+if (cardStatementItemForm) {
+    cardStatementItemForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+
+        const { monthYYYYMM, creditCardId } = getSelectedStatementContext();
+        if (!monthYYYYMM || !creditCardId) {
+            alert('Selecione cartão e mês.');
+            return;
+        }
+
+        const description = cardStatementItemDescriptionInput ? cardStatementItemDescriptionInput.value.trim() : '';
+        const amount = cardStatementItemAmountInput ? +cardStatementItemAmountInput.value : NaN;
+        const area = cardStatementItemAreaInput ? cardStatementItemAreaInput.value.trim() : '';
+
+        if (!description || !Number.isFinite(amount)) {
+            alert('Preencha descrição e valor.');
+            return;
+        }
+
+        const statement = upsertCardStatement(creditCardId, monthYYYYMM);
+        if (!statement) return;
+
+        if (!Array.isArray(statement.items)) statement.items = [];
+        statement.items.push({
+            id: generateID(),
+            description,
+            amount: Math.abs(amount),
+            area
+        });
+
+        // Se o fechamento ainda não existir, tenta usar o valor digitado
+        if (!Number.isFinite(+statement.closingTotal) || +statement.closingTotal === 0) {
+            const closingInput = +cardStatementClosingTotalInput.value;
+            if (Number.isFinite(closingInput)) statement.closingTotal = Math.abs(closingInput);
+        }
+
+        setJSONToLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, creditCardMonthlyStatements);
+
+        // Feedback e render
+        if (cardStatementItemDescriptionInput) cardStatementItemDescriptionInput.value = '';
+        if (cardStatementItemAmountInput) cardStatementItemAmountInput.value = '';
+        if (cardStatementItemAreaInput) cardStatementItemAreaInput.value = '';
+
+        renderCardStatementForSelected();
+        if (typeof renderAnalyticsForMonth === 'function' && analyticsMonthInput && analyticsMonthInput.value === monthYYYYMM) {
+            renderAnalyticsForMonth(monthYYYYMM);
+        }
+    });
+}
+
+// -------------------------
 // Análises (novo): área e gráfico de pizza por tipo
 // -------------------------
 const analyticsMonthInput = document.getElementById('analytics-month');
@@ -910,6 +1165,17 @@ function renderAnalyticsForMonth(monthYYYYMM) {
 
     purchases.forEach(tx => {
         addToMaps(tx.area ? tx.area : 'Sem área', 'Cartão (compra avulsa)', Math.abs(tx.amount));
+    });
+
+    // Itens do fechamento do cartão (deduções) no mês
+    const statementsForMonth = (creditCardMonthlyStatements || []).filter(s => s && s.month === monthYYYYMM);
+    statementsForMonth.forEach(statement => {
+        const items = Array.isArray(statement.items) ? statement.items : [];
+        items.forEach(it => {
+            const amountAbs = Math.abs(Number(it.amount) || 0);
+            if (!amountAbs) return;
+            addToMaps(it.area ? it.area : 'Sem área', 'Cartão (fechamento)', amountAbs);
+        });
     });
 
     // Outras despesas manuais (não contam as recorrências já modeladas)
