@@ -1755,7 +1755,7 @@ function renderAnalyticsForMonth(monthYYYYMM) {
         options: {
             responsive: false,
             plugins: {
-                legend: { position: 'bottom', labels: { color: '#e6edf3' } },
+                legend: { position: 'bottom', labels: { color: '#0f172a' } },
                 tooltip: {
                     callbacks: {
                         label: function (context) {
@@ -1792,13 +1792,13 @@ function renderAnalyticsForMonth(monthYYYYMM) {
                 },
                 scales: {
                     x: {
-                        ticks: { color: '#e6edf3' },
-                        grid: { color: 'rgba(255,255,255,0.06)' }
+                        ticks: { color: '#0f172a' },
+                        grid: { color: 'rgba(15,23,42,0.08)' }
                     },
                     y: {
                         beginAtZero: true,
-                        ticks: { color: '#e6edf3' },
-                        grid: { color: 'rgba(255,255,255,0.06)' }
+                        ticks: { color: '#0f172a' },
+                        grid: { color: 'rgba(15,23,42,0.08)' }
                     }
                 }
             }

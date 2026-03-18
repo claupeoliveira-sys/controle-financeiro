@@ -1,14 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Lato&display=swap');
 
 :root {
-    --primary-color: #20c997; /* Verde para receitas */
-    --danger-color: #ff5c7a; /* Vermelho para despesas */
-    --text-color: #e6edf3;
-    --muted-text-color: rgba(230, 237, 243, 0.7);
-    --bg-color: #0b1220;
-    --panel-bg: #0f1b33;
-    --card-bg: #0f1b33;
-    --border-color: #22314d;
+    --primary-color: #16a34a; /* Verde para receitas */
+    --danger-color: #ef4444; /* Vermelho para despesas */
+    --text-color: #0f172a;
+    --muted-text-color: rgba(15, 23, 42, 0.65);
+    --bg-color: #f5f7fb;
+    --panel-bg: #ffffff;
+    --card-bg: #ffffff;
+    --border-color: #e5e7eb;
 }
 
 * {
@@ -61,7 +61,7 @@ h4 {
     margin-bottom: 14px;
     padding: 12px;
     border-radius: 5px;
-    background-color: var(--panel-bg);
+    background-color: rgba(15, 23, 42, 0.04);
 }
 
 #balance {
@@ -155,7 +155,7 @@ h4 {
 .tab-btn {
     cursor: pointer;
     border: 1px solid var(--border-color);
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: #ffffff;
     color: var(--text-color);
     border-radius: 6px;
     padding: 8px 10px;
@@ -190,16 +190,17 @@ h4 {
 }
 
 .btn.secondary {
-    background-color: #27344d;
+    background-color: #f3f4f6;
+    color: var(--text-color);
 }
 
 .btn.secondary:hover {
-    background-color: #1f2a3d;
+    background-color: #e5e7eb;
 }
 
 .edit-btn {
     cursor: pointer;
-    background-color: #0d6efd;
+    background-color: #2563eb;
     border: 0;
     color: #fff;
     font-size: 14px;
@@ -212,7 +213,7 @@ h4 {
 }
 
 .edit-btn:hover {
-    background-color: #0b5ed7;
+    background-color: #1d4ed8;
 }
 
 .action-icon {
@@ -448,7 +449,7 @@ h4 {
 
 .icon-action-btn:hover {
     background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(230, 237, 243, 0.3);
+    border-color: rgba(15, 23, 42, 0.18);
 }
 
 .icon-action-btn svg {
@@ -558,20 +559,20 @@ h4 {
 
 .form-control input[type="text"]::placeholder,
 .form-control input[type="number"]::placeholder {
-    color: rgba(230, 237, 243, 0.55);
+    color: rgba(15, 23, 42, 0.35);
 }
 
 .form-control input[type="text"]:focus,
 .form-control input[type="number"]:focus,
 .form-control input[type="month"]:focus,
 .form-control select:focus {
-    border-color: rgba(230, 237, 243, 0.35);
-    box-shadow: 0 0 0 3px rgba(230, 237, 243, 0.10);
+    border-color: rgba(22, 163, 74, 0.45);
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
 }
 
 .input-invalid {
-    border-color: rgba(255, 92, 122, 0.9) !important;
-    box-shadow: 0 0 0 3px rgba(255, 92, 122, 0.18) !important;
+    border-color: rgba(239, 68, 68, 0.9) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18) !important;
 }
 
 .btn {
@@ -620,7 +621,7 @@ h4 {
     margin: 8px 0 12px;
     border: 1px solid var(--border-color);
     border-radius: 10px;
-    background-color: rgba(15, 27, 51, 0.65);
+    background-color: rgba(15, 23, 42, 0.03);
     padding: 5px 10px;
 }
 
@@ -637,7 +638,7 @@ h4 {
     top: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background-color: rgba(15, 27, 51, 0.95);
+    background-color: #ffffff;
     border: 1px solid var(--border-color);
     color: var(--text-color);
     padding: 10px 14px;
@@ -664,17 +665,17 @@ h4 {
     width: 28px;
     height: 28px;
     border-radius: 999px;
-    background: rgba(32, 201, 151, 0.18);
-    border: 1px solid rgba(32, 201, 151, 0.35);
-    font-weight: bold;
+    background: rgba(22, 163, 74, 0.12);
+    border: 1px solid rgba(22, 163, 74, 0.25);
+    font-weight: 700;
     font-size: 12px;
-    color: rgba(230, 237, 243, 0.9);
+    color: rgba(15, 23, 42, 0.85);
     flex: 0 0 auto;
 }
 
 .toast-badge.error {
-    background: rgba(255, 92, 122, 0.16);
-    border-color: rgba(255, 92, 122, 0.45);
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.28);
 }
 
 #transaction-list li .edit-btn {
