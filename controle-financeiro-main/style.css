@@ -90,18 +90,18 @@ h4 {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px;
-    margin: 8px 0;
+    padding: 7px;
+    margin: 7px 0;
     border-radius: 6px;
     position: relative;
 }
 
 #transaction-list li.plus {
-    border-right: 4px solid var(--primary-color);
+    border-right: 2px solid var(--primary-color);
 }
 
 #transaction-list li.minus {
-    border-right: 4px solid var(--danger-color);
+    border-right: 2px solid var(--danger-color);
 }
 
 #transaction-list li .tx-desc {
@@ -110,8 +110,8 @@ h4 {
 
 #transaction-list li .tx-meta {
     color: var(--muted-text-color);
-    font-size: 12px;
-    margin-top: 2px;
+    font-size: 11px;
+    margin-top: 1px;
 }
 
 #transaction-list li .delete-btn {
@@ -202,8 +202,8 @@ h4 {
     background-color: #0d6efd;
     border: 0;
     color: #fff;
-    font-size: 16px;
-    padding: 6px 10px;
+    font-size: 14px;
+    padding: 6px 8px;
     border-radius: 6px;
     display: flex;
     align-items: center;
@@ -243,7 +243,7 @@ h4 {
 .analysis-grid {
     display: grid;
     grid-template-columns: 1.1fr 0.9fr;
-    gap: 10px;
+    gap: 8px;
     align-items: start;
     margin-top: 10px;
 }
@@ -252,13 +252,20 @@ h4 {
     background-color: var(--panel-bg);
     border: 1px solid var(--border-color);
     border-radius: 10px;
-    padding: 12px;
+    padding: 10px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .analysis-total {
     font-weight: bold;
     text-align: right;
+}
+
+#analytics-area-list,
+#analytics-origin-list {
+    max-height: 240px;
+    overflow: auto;
+    padding-right: 6px;
 }
 
 #analytics-area-list li {
@@ -292,8 +299,8 @@ h4 {
 
 .monthly-total {
     text-align: center;
-    margin: 8px 0 14px;
-    padding: 12px;
+    margin: 6px 0 12px;
+    padding: 10px;
     border-radius: 6px;
     background-color: var(--panel-bg);
     font-weight: bold;
@@ -309,7 +316,7 @@ h4 {
 
 .form-row {
     display: flex;
-    gap: 10px;
+    gap: 8px;
 }
 
 .form-row .form-control {
@@ -344,8 +351,8 @@ h4 {
 .credit-card-item {
     background-color: var(--card-bg);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
-    padding: 8px;
-    margin: 8px 0;
+    padding: 6px;
+    margin: 6px 0;
     border-radius: 6px;
     display: flex;
     justify-content: space-between;
@@ -408,17 +415,35 @@ h4 {
     display: flex;
 }
 
+.credit-card-actions {
+    display: none;
+    flex-direction: row;
+    gap: 6px;
+}
+
+.credit-card-item:hover .credit-card-actions {
+    display: flex;
+}
+
 .icon-action-btn {
     cursor: pointer;
     border: 1px solid var(--border-color);
     background: rgba(255, 255, 255, 0.02);
     color: var(--text-color);
     border-radius: 8px;
-    padding: 6px 10px;
+    padding: 5px 8px;
     display: inline-flex;
     align-items: center;
     gap: 6px;
     transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.icon-action-btn .btn-text {
+    display: none;
+}
+
+.edit-btn .btn-text {
+    display: none;
 }
 
 .icon-action-btn:hover {
@@ -454,8 +479,8 @@ h4 {
 .invoice-item {
     background-color: var(--card-bg);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
-    padding: 8px;
-    margin: 8px 0;
+    padding: 6px;
+    margin: 6px 0;
     border-radius: 6px;
     display: flex;
     justify-content: space-between;
@@ -472,8 +497,8 @@ h4 {
 .statement-item {
     background-color: var(--card-bg);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
-    padding: 8px;
-    margin: 8px 0;
+    padding: 6px;
+    margin: 6px 0;
     border-radius: 6px;
     display: flex;
     justify-content: space-between;
@@ -508,7 +533,7 @@ h4 {
 }
 
 .form-control {
-    margin: 0 0 10px;
+    margin: 0 0 8px;
 }
 
 .form-control label {
@@ -523,8 +548,8 @@ h4 {
     border: 1px solid var(--border-color);
     border-radius: 4px;
     display: block;
-    font-size: 16px;
-    padding: 10px 12px;
+    font-size: 15px;
+    padding: 9px 10px;
     width: 100%;
     background-color: rgba(255, 255, 255, 0.03);
     color: var(--text-color);
@@ -622,11 +647,34 @@ h4 {
     pointer-events: none;
     transition: opacity 0.2s ease, transform 0.2s ease;
     z-index: 999;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .toast.show {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
+}
+
+.toast-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: rgba(32, 201, 151, 0.18);
+    border: 1px solid rgba(32, 201, 151, 0.35);
+    font-weight: bold;
+    font-size: 12px;
+    color: rgba(230, 237, 243, 0.9);
+    flex: 0 0 auto;
+}
+
+.toast-badge.error {
+    background: rgba(255, 92, 122, 0.16);
+    border-color: rgba(255, 92, 122, 0.45);
 }
 
 #transaction-list li .edit-btn {

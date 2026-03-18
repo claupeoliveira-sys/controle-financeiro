@@ -52,7 +52,17 @@ let toastTimer = null;
 
 function showToast(message) {
     if (!toastEl) return;
-    toastEl.textContent = message;
+
+    const normalized = (message || '').toString().toLowerCase();
+    const isError = normalized.includes('preencha') || normalized.includes('invál') || normalized.includes('erro') || normalized.includes('invalid');
+
+    toastEl.innerHTML = '';
+    const badge = document.createElement('span');
+    badge.className = `toast-badge${isError ? ' error' : ''}`;
+    badge.textContent = isError ? 'ERRO' : 'OK';
+    toastEl.appendChild(badge);
+    toastEl.appendChild(document.createTextNode(` ${message}`));
+
     toastEl.classList.add('show');
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
@@ -171,14 +181,14 @@ function addTransactionDOM(transaction) {
             ].filter(Boolean).join(' | ')}</div>
         </div>
         <span>${sign} R$ ${Math.abs(transaction.amount).toFixed(2)}</span>
-        <button class="edit-btn" type="button" onclick="startEditTransaction(${transaction.id})" aria-label="Editar transação">
+        <button class="edit-btn" type="button" onclick="startEditTransaction(${transaction.id})" aria-label="Editar transação" title="Editar transação">
             <span class="action-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 20h9"></path>
                     <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
                 </svg>
             </span>
-            Editar
+            <span class="btn-text">Editar</span>
         </button>
         <button class="delete-btn" onclick="removeTransaction(${transaction.id})" type="button" aria-label="Remover">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -737,7 +747,7 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
                             <path d="M12 20h9"></path>
                             <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
                         </svg>
-                        Editar
+                        <span class="btn-text">Editar</span>
                     </button>
                     <button class="icon-action-btn recurring-remove-btn" type="button" onclick="removeRecurringCost(${cost.id})" aria-label="Remover recorrência">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -747,7 +757,7 @@ function renderRecurringCostsForMonth(monthYYYYMM) {
                             <path d="M10 11v6"></path>
                             <path d="M14 11v6"></path>
                         </svg>
-                        Remover
+                        <span class="btn-text">Remover</span>
                     </button>
                 </div>
             </div>
@@ -956,11 +966,88 @@ function renderCreditCardsList() {
             </div>
             <div class="credit-card-right">
                 <div class="credit-card-total">R$ ${Math.abs(card.annualTotal).toFixed(2)} / ano</div>
+                <div class="credit-card-actions" aria-hidden="true">
+                    <button class="icon-action-btn" type="button" onclick="startEditCreditCard(${card.id})" aria-label="Editar cartão" title="Editar">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 20h9"></path>
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                        </svg>
+                        <span class="btn-text">Editar</span>
+                    </button>
+                    <button class="icon-action-btn recurring-remove-btn" type="button" onclick="removeCreditCard(${card.id})" aria-label="Remover cartão" title="Remover">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3 6h18"></path>
+                            <path d="M8 6V4h8v2"></path>
+                            <path d="M19 6l-1 14H6L5 6"></path>
+                            <path d="M10 11v6"></path>
+                            <path d="M14 11v6"></path>
+                        </svg>
+                        <span class="btn-text">Remover</span>
+                    </button>
+                </div>
             </div>
         `;
 
         creditCardsList.appendChild(li);
     });
+}
+
+function startEditCreditCard(cardId) {
+    const card = creditCards.find(c => c.id === cardId);
+    if (!card) return;
+
+    if (creditCardNameInput) creditCardNameInput.value = card.name ?? '';
+    if (creditCardAnnualTotalInput) creditCardAnnualTotalInput.value = Math.abs(card.annualTotal ?? 0);
+
+    showToast('Editando cartão...');
+}
+
+function removeCreditCard(cardId) {
+    const card = creditCards.find(c => c.id === cardId);
+    if (!card) return;
+
+    const confirmed = confirm(`Remover o cartão "${card.name}"?`);
+    if (!confirmed) return;
+
+    creditCards = creditCards.filter(c => c.id !== cardId);
+
+    // remove statements do cartão
+    creditCardMonthlyStatements = (creditCardMonthlyStatements || []).filter(s => String(s.creditCardId) !== String(cardId));
+
+    // limpa referência do cartão nas recorrências
+    recurringCosts = recurringCosts.map(c => (String(c.creditCardId) === String(cardId) ? { ...c, creditCardId: null } : c));
+
+    // atualiza transações existentes vinculadas ao cartão
+    transactions = (transactions || []).map(tx => {
+        const meta = tx.meta || {};
+        if (meta.type === 'recurring_cost' && meta.recurringCostId) {
+            const cost = recurringCosts.find(c => c.id === meta.recurringCostId);
+            meta.creditCardId = cost ? cost.creditCardId ?? null : null;
+            return { ...tx, meta };
+        }
+        if (meta.type === 'credit_card_purchase' && meta.creditCardId && String(meta.creditCardId) === String(cardId)) {
+            meta.creditCardId = null;
+            return { ...tx, meta };
+        }
+        return tx;
+    });
+
+    setJSONToLocalStorage(STORAGE_KEYS.creditCards, creditCards);
+    setJSONToLocalStorage(STORAGE_KEYS.creditCardMonthlyStatements, creditCardMonthlyStatements);
+    setJSONToLocalStorage(STORAGE_KEYS.recurringCosts, recurringCosts);
+    saveTransactionsToLocalStorage(transactions);
+
+    renderCreditCardsList();
+    if (typeof renderCostCreditCardSelectOptions === 'function') renderCostCreditCardSelectOptions();
+    if (typeof renderPurchaseCardSelectOptions === 'function') renderPurchaseCardSelectOptions();
+    if (typeof renderCardStatementSelectOptions === 'function') renderCardStatementSelectOptions();
+
+    if (costMonthInput && costMonthInput.value) renderRecurringCostsForMonth(costMonthInput.value);
+    if (invoiceMonthInput && invoiceMonthInput.value) renderInvoicesForMonth(invoiceMonthInput.value);
+    if (analyticsMonthInput && analyticsMonthInput.value) renderAnalyticsForMonth(analyticsMonthInput.value);
+
+    init();
+    showToast('Cartão removido com sucesso!');
 }
 
 if (creditCardForm) {
@@ -1000,6 +1087,8 @@ if (creditCardForm) {
         if (invoiceMonthInput && invoiceMonthInput.value) {
             renderInvoicesForMonth(invoiceMonthInput.value);
         }
+
+        showToast('Cartão salvo com sucesso!');
 
         creditCardNameInput.value = '';
         creditCardAnnualTotalInput.value = '';
