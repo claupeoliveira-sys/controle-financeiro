@@ -1,4 +1,4 @@
-﻿const balance = document.getElementById('balance');
+const balance = document.getElementById('balance');
 const transactionList = document.getElementById('transaction-list');
 const form = document.getElementById('transaction-form');
 const descriptionInput = document.getElementById('description');
@@ -24,6 +24,8 @@ function getJSONFromLocalStorage(key, fallback) {
 
 function setJSONToLocalStorage(key, value) {
     localStorage.setItem(key, JSON.stringify(value));
+    // Sincroniza com Mongo (API) quando habilitado e após o carregamento inicial.
+    schedulePersistToMongo();
 }
 
 // Função para obter transações do Local Storage
@@ -40,32 +42,119 @@ let transactions = getTransactionsFromLocalStorage();
 let recurringCosts = getJSONFromLocalStorage(STORAGE_KEYS.recurringCosts, []);
 let variableCostOverrides = getJSONFromLocalStorage(STORAGE_KEYS.variableCostOverrides, []);
 
-// Migração leve para o modelo simplificado (sem cartões)
-// Normaliza tipos de recorrência para 'fixo' | 'variavel'.
-recurringCosts = (recurringCosts || []).map(c => {
-    const rawType = (c && c.type) ? String(c.type) : '';
-    let type = rawType;
-    if (rawType === 'fixo_automatico' || rawType === 'fixo_manual' || rawType === 'fixo') type = 'fixo';
-    if (rawType === 'variavel_manual' || rawType === 'variavel') type = 'variavel';
-    // fallback (casos antigos)
-    if (rawType === 'temporario_manual') type = 'fixo';
+// -------------------------
+// MongoDB sync (Atlas)
+// -------------------------
+let mongoSyncReady = false;
+let mongoApplyingLoad = false;
+let mongoPersistTimer = null;
 
-    const amount = type === 'variavel' ? 0 : Math.abs(Number(c?.amount ?? 0));
+function schedulePersistToMongo() {
+    if (!mongoSyncReady) return;
+    if (mongoApplyingLoad) return;
+    if (mongoPersistTimer) clearTimeout(mongoPersistTimer);
+    mongoPersistTimer = setTimeout(() => {
+        persistToMongo().catch(() => {
+            // Se falhar, continua funcionando no localStorage.
+        });
+    }, 400);
+}
+
+async function loadFromMongo() {
+    const res = await fetch('/api/state', { method: 'GET', cache: 'no-store' });
+    if (!res.ok) throw new Error('Falha ao carregar estado');
+    const data = await res.json();
     return {
-        ...c,
-        type,
-        amount
+        transactions: Array.isArray(data.transactions) ? data.transactions : [],
+        recurringCosts: Array.isArray(data.recurringCosts) ? data.recurringCosts : [],
+        variableCostOverrides: Array.isArray(data.variableCostOverrides) ? data.variableCostOverrides : []
     };
+}
+
+async function persistToMongo() {
+    const payload = {
+        transactions,
+        recurringCosts,
+        variableCostOverrides
+    };
+    const res = await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Falha ao salvar estado');
+    return res.json();
+}
+
+async function initMongoSync() {
+    try {
+        mongoApplyingLoad = true;
+        const state = await loadFromMongo();
+        transactions = state.transactions;
+        recurringCosts = state.recurringCosts;
+        variableCostOverrides = state.variableCostOverrides;
+
+        // Atualiza cache local para manter comportamento.
+        localStorage.setItem(STORAGE_KEYS.transactions, JSON.stringify(transactions));
+        localStorage.setItem(STORAGE_KEYS.recurringCosts, JSON.stringify(recurringCosts));
+        localStorage.setItem(STORAGE_KEYS.variableCostOverrides, JSON.stringify(variableCostOverrides));
+
+        // Reaplica normalização do modelo simplificado.
+        normalizeStateForSimplifiedModel();
+    } catch (e) {
+        // Permanece usando localStorage.
+    } finally {
+        mongoApplyingLoad = false;
+        mongoSyncReady = true;
+
+        // Atualiza telas com o estado carregado (ou fallback localStorage).
+        init();
+        const costMonthEl = document.getElementById('cost-month');
+        if (costMonthEl && costMonthEl.value && typeof renderRecurringCostsForMonth === 'function') {
+            renderRecurringCostsForMonth(costMonthEl.value);
+        }
+        const analyticsMonthEl = document.getElementById('analytics-month');
+        if (analyticsMonthEl && analyticsMonthEl.value && typeof renderAnalyticsForMonth === 'function') {
+            renderAnalyticsForMonth(analyticsMonthEl.value);
+        }
+    }
+}
+
+// Carrega do Mongo assim que possível.
+initMongoSync().catch(() => {
+    mongoSyncReady = true;
 });
 
-const recurringCostTypeMap = new Map((recurringCosts || []).map(c => [String(c.id), c.type]));
-variableCostOverrides = (variableCostOverrides || [])
-    .filter(o => o && recurringCostTypeMap.get(String(o.costId)) === 'variavel')
-    .map(o => ({
-        ...o,
-        month: o.month,
-        amount: Math.abs(Number(o.amount ?? 0))
-    }));
+function normalizeStateForSimplifiedModel() {
+    // Migração leve para o modelo simplificado (sem cartões)
+    // Normaliza tipos de recorrência para 'fixo' | 'variavel'.
+    recurringCosts = (recurringCosts || []).map(c => {
+        const rawType = (c && c.type) ? String(c.type) : '';
+        let type = rawType;
+        if (rawType === 'fixo_automatico' || rawType === 'fixo_manual' || rawType === 'fixo') type = 'fixo';
+        if (rawType === 'variavel_manual' || rawType === 'variavel') type = 'variavel';
+        // fallback (casos antigos)
+        if (rawType === 'temporario_manual') type = 'fixo';
+
+        const amount = type === 'variavel' ? 0 : Math.abs(Number(c?.amount ?? 0));
+        return {
+            ...c,
+            type,
+            amount
+        };
+    });
+
+    const recurringCostTypeMap = new Map((recurringCosts || []).map(c => [String(c.id), c.type]));
+    variableCostOverrides = (variableCostOverrides || [])
+        .filter(o => o && recurringCostTypeMap.get(String(o.costId)) === 'variavel')
+        .map(o => ({
+            ...o,
+            month: o.month,
+            amount: Math.abs(Number(o.amount ?? 0))
+        }));
+}
+
+normalizeStateForSimplifiedModel();
 
 // -------------------------
 // UI: toast e colapsos
