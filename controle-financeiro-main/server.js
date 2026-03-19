@@ -7,6 +7,8 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+let mongoConnectionStatus = 'disconnected';
+let mongoConnectionReason = 'Nao inicializado';
 
 // Servir a própria pasta da aplicação
 const publicDir = __dirname;
@@ -19,15 +21,38 @@ app.use(express.json({ limit: '10mb' }));
 const MONGODB_URI = process.env.MONGODB_URI;
 if (!MONGODB_URI) {
   // Sem Mongo, a API não funciona, mas o static pode abrir.
+  mongoConnectionStatus = 'not_configured';
+  mongoConnectionReason = 'MONGODB_URI nao definido no .env';
   console.warn('MONGODB_URI nao definido. Configure no .env.');
 } else {
+  mongoConnectionStatus = 'connecting';
+  mongoConnectionReason = 'Tentando conectar ao MongoDB Atlas...';
   mongoose
     .connect(MONGODB_URI)
-    .then(() => console.log('MongoDB conectado.'))
+    .then(() => {
+      mongoConnectionStatus = 'connected';
+      mongoConnectionReason = 'Conectado com sucesso ao MongoDB Atlas';
+      console.log('MongoDB conectado.');
+    })
     .catch(err => {
+      mongoConnectionStatus = 'error';
+      mongoConnectionReason = err?.message || 'Erro desconhecido ao conectar';
       console.error('Erro ao conectar no MongoDB:', err);
       process.exit(1);
     });
+
+  mongoose.connection.on('error', err => {
+    mongoConnectionStatus = 'error';
+    mongoConnectionReason = err?.message || 'Erro de conexao MongoDB';
+  });
+  mongoose.connection.on('disconnected', () => {
+    mongoConnectionStatus = 'disconnected';
+    mongoConnectionReason = 'Conexao com MongoDB encerrada';
+  });
+  mongoose.connection.on('reconnected', () => {
+    mongoConnectionStatus = 'connected';
+    mongoConnectionReason = 'Conexao com MongoDB restabelecida';
+  });
 }
 
 const StateSchema = new mongoose.Schema(
@@ -43,7 +68,16 @@ const StateSchema = new mongoose.Schema(
 const State = mongoose.models.State || mongoose.model('State', StateSchema, 'app_state');
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true });
+  const mongoReady = mongoose.connection.readyState === 1;
+  res.json({
+    ok: true,
+    mongo: {
+      ready: mongoReady,
+      status: mongoConnectionStatus,
+      reason: mongoConnectionReason,
+      readyState: mongoose.connection.readyState
+    }
+  });
 });
 
 app.get('/api/state', async (req, res) => {

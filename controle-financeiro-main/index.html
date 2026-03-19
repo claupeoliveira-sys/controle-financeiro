@@ -25,6 +25,14 @@
 
     <div class="container">
         <h1>Controle de Orçamento</h1>
+        <div class="connection-status" aria-live="polite">
+            <span id="connection-badge" class="connection-badge local">Modo local</span>
+            <span id="connection-text">Usando localStorage.</span>
+        </div>
+        <details class="connection-logs">
+            <summary>Logs de conexão</summary>
+            <pre id="connection-log-output">Inicializando...</pre>
+        </details>
 
         <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

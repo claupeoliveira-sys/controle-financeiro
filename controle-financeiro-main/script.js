@@ -42,6 +42,36 @@ let transactions = getTransactionsFromLocalStorage();
 let recurringCosts = getJSONFromLocalStorage(STORAGE_KEYS.recurringCosts, []);
 let variableCostOverrides = getJSONFromLocalStorage(STORAGE_KEYS.variableCostOverrides, []);
 
+const connectionBadgeEl = document.getElementById('connection-badge');
+const connectionTextEl = document.getElementById('connection-text');
+const connectionLogOutputEl = document.getElementById('connection-log-output');
+const connectionLogs = [];
+
+function addConnectionLog(message) {
+    const ts = new Date().toLocaleTimeString('pt-BR');
+    const line = `[${ts}] ${message}`;
+    connectionLogs.push(line);
+    if (connectionLogs.length > 50) connectionLogs.shift();
+    if (connectionLogOutputEl) connectionLogOutputEl.textContent = connectionLogs.join('\n');
+}
+
+function setConnectionStatus(mode, text) {
+    if (connectionBadgeEl) {
+        connectionBadgeEl.classList.remove('mongo', 'local', 'error');
+        if (mode === 'mongo') {
+            connectionBadgeEl.classList.add('mongo');
+            connectionBadgeEl.textContent = 'MongoDB';
+        } else if (mode === 'error') {
+            connectionBadgeEl.classList.add('error');
+            connectionBadgeEl.textContent = 'Erro';
+        } else {
+            connectionBadgeEl.classList.add('local');
+            connectionBadgeEl.textContent = 'Local';
+        }
+    }
+    if (connectionTextEl) connectionTextEl.textContent = text;
+}
+
 // -------------------------
 // MongoDB sync (Atlas)
 // -------------------------
@@ -49,12 +79,26 @@ let mongoSyncReady = false;
 let mongoApplyingLoad = false;
 let mongoPersistTimer = null;
 
+setConnectionStatus('local', 'Usando localStorage (inicializando conexão com banco).');
+addConnectionLog('Inicializando sincronização MongoDB...');
+
+async function checkBackendHealth() {
+    const res = await fetch('/api/health', { method: 'GET', cache: 'no-store' });
+    if (!res.ok) throw new Error(`Healthcheck HTTP ${res.status}`);
+    const data = await res.json();
+    return data?.mongo || null;
+}
+
 function schedulePersistToMongo() {
     if (!mongoSyncReady) return;
     if (mongoApplyingLoad) return;
     if (mongoPersistTimer) clearTimeout(mongoPersistTimer);
     mongoPersistTimer = setTimeout(() => {
-        persistToMongo().catch(() => {
+        persistToMongo().then(() => {
+            setConnectionStatus('mongo', 'Conectado ao MongoDB Atlas.');
+        }).catch((e) => {
+            addConnectionLog(`Falha ao persistir no MongoDB: ${e?.message || e}`);
+            setConnectionStatus('local', 'Falha ao salvar no MongoDB. Mantendo localStorage.');
             // Se falhar, continua funcionando no localStorage.
         });
     }, 400);
@@ -88,6 +132,14 @@ async function persistToMongo() {
 
 async function initMongoSync() {
     try {
+        const health = await checkBackendHealth();
+        if (health) {
+            addConnectionLog(`Health: status=${health.status}, ready=${health.ready}, motivo=${health.reason || 'n/a'}`);
+            if (!health.ready) {
+                setConnectionStatus('local', `Mongo indisponível: ${health.reason || 'sem detalhes'}. Usando localStorage.`);
+            }
+        }
+
         mongoApplyingLoad = true;
         const state = await loadFromMongo();
         transactions = state.transactions;
@@ -101,7 +153,11 @@ async function initMongoSync() {
 
         // Reaplica normalização do modelo simplificado.
         normalizeStateForSimplifiedModel();
+        setConnectionStatus('mongo', 'Conectado ao MongoDB Atlas.');
+        addConnectionLog('Estado carregado do MongoDB com sucesso.');
     } catch (e) {
+        addConnectionLog(`Falha ao carregar MongoDB: ${e?.message || e}`);
+        setConnectionStatus('local', `Usando localStorage. Motivo: ${e?.message || 'falha desconhecida'}`);
         // Permanece usando localStorage.
     } finally {
         mongoApplyingLoad = false;
@@ -122,8 +178,24 @@ async function initMongoSync() {
 
 // Carrega do Mongo assim que possível.
 initMongoSync().catch(() => {
+    addConnectionLog('Erro não tratado na inicialização do MongoDB.');
+    setConnectionStatus('error', 'Erro inesperado ao inicializar MongoDB.');
     mongoSyncReady = true;
 });
+
+setInterval(() => {
+    checkBackendHealth()
+        .then(health => {
+            if (!health) return;
+            if (!health.ready) {
+                setConnectionStatus('local', `Mongo indisponível: ${health.reason || 'sem detalhes'}. Usando localStorage.`);
+            }
+        })
+        .catch(err => {
+            addConnectionLog(`Healthcheck falhou: ${err?.message || err}`);
+            setConnectionStatus('local', 'API indisponível. Usando localStorage.');
+        });
+}, 20000);
 
 function normalizeStateForSimplifiedModel() {
     // Migração leve para o modelo simplificado (sem cartões)
