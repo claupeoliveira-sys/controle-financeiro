@@ -45,6 +45,13 @@ h1 {
     color: var(--text-color);
 }
 
+.build-version {
+    text-align: center;
+    color: var(--muted-text-color);
+    font-size: 12px;
+    margin: -4px 0 10px;
+}
+
 .connection-status {
     display: flex;
     align-items: center;

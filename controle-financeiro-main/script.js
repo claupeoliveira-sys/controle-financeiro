@@ -45,6 +45,7 @@ let variableCostOverrides = getJSONFromLocalStorage(STORAGE_KEYS.variableCostOve
 const connectionBadgeEl = document.getElementById('connection-badge');
 const connectionTextEl = document.getElementById('connection-text');
 const connectionLogOutputEl = document.getElementById('connection-log-output');
+const buildVersionEl = document.getElementById('build-version');
 const connectionLogs = [];
 
 function addConnectionLog(message) {
@@ -72,6 +73,27 @@ function setConnectionStatus(mode, text) {
     if (connectionTextEl) connectionTextEl.textContent = text;
 }
 
+async function loadBuildVersionLabel() {
+    if (!buildVersionEl) return;
+    try {
+        const res = await fetch('/build-info.json', { method: 'GET', cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const info = await res.json();
+
+        const version = info?.appVersion || '0.0.0';
+        const iso = info?.buildTimestampISO;
+        const buildDate = iso ? new Date(iso) : null;
+        const formatted = buildDate && !Number.isNaN(buildDate.getTime())
+            ? buildDate.toLocaleString('pt-BR')
+            : 'data inválida';
+
+        buildVersionEl.textContent = `Versão ${version} | Build: ${formatted}`;
+    } catch (err) {
+        buildVersionEl.textContent = 'Versão: não foi possível carregar metadados de build';
+        addConnectionLog(`Falha ao carregar build-info.json: ${err?.message || err}`);
+    }
+}
+
 // -------------------------
 // MongoDB sync (Atlas)
 // -------------------------
@@ -81,6 +103,9 @@ let mongoPersistTimer = null;
 
 setConnectionStatus('local', 'Usando localStorage (inicializando conexão com banco).');
 addConnectionLog('Inicializando sincronização MongoDB...');
+loadBuildVersionLabel().catch(() => {
+    // fallback já tratado internamente
+});
 
 async function checkBackendHealth() {
     const res = await fetch('/api/health', { method: 'GET', cache: 'no-store' });

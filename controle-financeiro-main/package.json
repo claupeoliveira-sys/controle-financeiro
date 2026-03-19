@@ -5,8 +5,9 @@
   "description": "Backend para Controle de Orçamento (MongoDB Atlas).",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "build:meta": "node scripts/build-meta.js",
+    "start": "npm run build:meta && node server.js",
+    "dev": "npm run build:meta && node server.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
