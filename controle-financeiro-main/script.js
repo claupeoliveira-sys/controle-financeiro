@@ -111,7 +111,34 @@ async function checkBackendHealth() {
     const res = await fetch('/api/health', { method: 'GET', cache: 'no-store' });
     if (!res.ok) throw new Error(`Healthcheck HTTP ${res.status}`);
     const data = await res.json();
-    return data?.mongo || null;
+    return data?.mongo ?? null;
+}
+
+function applyBackendHealthStatus(health) {
+    if (!health) return;
+
+    // Resposta nova do backend
+    const status = String(health.status || '').toLowerCase();
+    const reason = health.reason || 'Sem detalhes';
+    const detail = health.detail || '';
+    const connectionStatus = health.connectionStatus || '';
+
+    if (status === 'ok' && health.ready) {
+        setConnectionStatus('mongo', 'Conectado ao MongoDB Atlas.');
+        addConnectionLog(`Health OK: ${reason}`);
+        return;
+    }
+
+    // Casos de erro: distinguir Mongo não configurado vs desconectado
+    const normalized = `${reason} ${detail} ${connectionStatus}`.toLowerCase();
+    if (normalized.includes('não configurado') || normalized.includes('nao configurado') || normalized.includes('not_configured')) {
+        setConnectionStatus('local', 'MongoDB não configurado. Usando localStorage.');
+        addConnectionLog(`Health ERROR: MongoDB não configurado. ${detail || reason}`);
+        return;
+    }
+
+    setConnectionStatus('local', `MongoDB desconectado. Usando localStorage. Motivo: ${reason}`);
+    addConnectionLog(`Health ERROR: MongoDB desconectado/inacessível. ${detail || reason}`);
 }
 
 function schedulePersistToMongo() {
@@ -158,12 +185,7 @@ async function persistToMongo() {
 async function initMongoSync() {
     try {
         const health = await checkBackendHealth();
-        if (health) {
-            addConnectionLog(`Health: status=${health.status}, ready=${health.ready}, motivo=${health.reason || 'n/a'}`);
-            if (!health.ready) {
-                setConnectionStatus('local', `Mongo indisponível: ${health.reason || 'sem detalhes'}. Usando localStorage.`);
-            }
-        }
+        applyBackendHealthStatus(health);
 
         mongoApplyingLoad = true;
         const state = await loadFromMongo();
@@ -211,14 +233,11 @@ initMongoSync().catch(() => {
 setInterval(() => {
     checkBackendHealth()
         .then(health => {
-            if (!health) return;
-            if (!health.ready) {
-                setConnectionStatus('local', `Mongo indisponível: ${health.reason || 'sem detalhes'}. Usando localStorage.`);
-            }
+            applyBackendHealthStatus(health);
         })
         .catch(err => {
             addConnectionLog(`Healthcheck falhou: ${err?.message || err}`);
-            setConnectionStatus('local', 'API indisponível. Usando localStorage.');
+            setConnectionStatus('local', 'API inacessível. Usando localStorage.');
         });
 }, 20000);
 
